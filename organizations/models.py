@@ -5,7 +5,7 @@ class Organization(models.Model):
     name=models.CharField(max_length=255)
     slug=models.SlugField(unique=True)
     plan=models.CharField(max_length=20, default='free')
-    is_active=models.BooleanField(default=True)
+    is_active=models.BooleanField(default=True,db_index=True)
     created_at=models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return self.name
@@ -55,7 +55,7 @@ class Invitation(models.Model):
     email=models.EmailField(unique=True)
     token=models.CharField(max_length=255,unique=True)
     role=models.CharField(max_length=20,choices=RoleChoices.choices,default=RoleChoices.MEMBER)
-    status=models.CharField(max_length=20,choices=StatusChoices.choices,default=StatusChoices.PENDING)
+    status=models.CharField(max_length=20,choices=StatusChoices.choices,default=StatusChoices.PENDING,db_index=True)
     expires_at=models.DateTimeField()
     created_at=models.DateTimeField(auto_now_add=True)
     def __str__(self):
