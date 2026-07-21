@@ -38,9 +38,9 @@ def login_user(validated_data):
         if user is None:
             logger.warning(f'Invalid login attempt: {email}')
             raise AuthenticationFailed("Invalid username or password!")
-        if not user.is_verified:
-            logger.warning(f'Email not verified: {email}')
-            raise AuthenticationFailed("Please verify your email first!")
+        #if not user.is_verified:
+         #   logger.warning(f'Email not verified: {email}')
+          #  raise AuthenticationFailed("Please verify your email first!")
         refresh=RefreshToken.for_user(user)
         logger.info(f'User logged in successfully: {email}')
         return{

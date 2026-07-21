@@ -41,6 +41,7 @@ INSTALLED_APPS = [
 
     #thirdparty apps
     'rest_framework',
+    'django_filters',
 
     #local apps
     'accounts',
@@ -50,6 +51,8 @@ INSTALLED_APPS = [
     'tasks',
     'common',
     'rest_framework_simplejwt.token_blacklist',
+
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -136,3 +139,47 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL='accounts.User'
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
+
+    "DEFAULT_FILTER_BACKENDS": (
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ),
+
+    "DEFAULT_THROTTLE_CLASSES":[
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
+    ],
+
+    "DEFAULT_THROTTLE_RATES":{
+        "user":"100/hour",
+        "anon":"20/hour",
+    },
+    
+    "DEFAULT_VERSIONING_CLASS":"rest_framework.versioning.URLPathVersioning",
+    "DEFAULT_VERSION":"v1",
+    "ALLOWED_VERSIONS":["v1"],
+
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
+
+    "EXCEPTION_HANDLER":"common.exceptions.custom_exception_handler",
+
+    "DEFAULT_SCHEMA_CLASS":"drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS={
+    "TITLE":"ShipStream API",
+    "DESCRIPTION":"Backend API for Shipstream Project Management System",
+    "VERSION":"1.0.0",
+    "SERVE_INCLUDE_SCHEMA":False,
+}
