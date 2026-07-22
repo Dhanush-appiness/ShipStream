@@ -35,7 +35,7 @@ class OrganizationView(GenericAPIView):
     
         serializer=OrganizationSerializer(data=request.data)
         if serializer.is_valid():
-            organization=create_organization(serializer.validated_data)
+            organization=create_organization(request.user,serializer.validated_data)
             return Response(
                 {
                     'message':'Organization created successfully!',

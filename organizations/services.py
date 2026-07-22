@@ -1,25 +1,31 @@
 from django.utils.text import slugify
-from .models import Organization
+from .models import Organization, Membership
 import logging 
 
 logger=logging.getLogger(__name__)
 
-def create_organization(validated_data):
+def create_organization(user,validated_data):
     """
-    Create a new organization with a generated slug.
+    Create a new organization with a generated slug
+    and make the creator its ADMIN.
     """
-    
-    name=validated_data['name']
-    logger.info(f'Creating organization: {name}')
+
+    name=validated_data["name"]
+    logger.info(f"Creating organization:{name}")
     try:
         organization=Organization.objects.create(
             name=name,
-            slug=slugify(name)
+            slug=slugify(name),
         )
-        logger.info(f'Organization created successfully: {name}')
+        Membership.objects.create(
+            user=user,
+            organization=organization,
+            role="ADMIN",
+        )
+        logger.info(f"Organization created successfully:{name}")
         return organization
     except Exception as e:
-        logger.error(f'Organization creation failed: {str(e)}')
+        logger.error(f"Organization creation failed:{str(e)}")
         raise
 
 def list_organizations():
