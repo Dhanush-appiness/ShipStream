@@ -1,22 +1,25 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
+import logging
+
+logger=logging.getLogger(__name__)
 
 class TaskConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        print("✅ WebSocket connected")
+        logger.info("WebSocket connected")
         await self.channel_layer.group_add(
             'tasks',
             self.channel_name,
         )
         await self.accept()
     async def disconnect(self, close_code):
-        print(f"❌ WebSocket disconnected: {close_code}")
+        logger.info("WebSocket disconnected: %s", close_code)
         await self.channel_layer.group_discard(
             'tasks',
             self.channel_name,
         )
     async def task_updated(self, event):
-        print("📢 Sending:", event)
+        logger.info("Sending websocket event: %s", event)
         await self.send(
             text_data=json.dumps(event)
         )

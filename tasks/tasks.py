@@ -1,7 +1,10 @@
 from celery import shared_task
+import logging
+
+logger=logging.getLogger(__name__)
 
 
 @shared_task
 def test_task():
-    print('Celery is working!')
+    logger.info('Celery is working!')
     return 'Success'

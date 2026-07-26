@@ -17,8 +17,10 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import (SpectacularAPIView,SpectacularSwaggerView,SpectacularRedocView)
+import logging
 
-print('CONFIG URLS LOADED')
+logger=logging.getLogger(__name__)
+logger.info('Config URLs loaded')
 
 urlpatterns = [
     path('admin/', admin.site.urls),

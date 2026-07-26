@@ -4,11 +4,14 @@ from projects.models import ExportJob
 from organizations.models import Membership
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+import logging
+
+logger=logging.getLogger(__name__)
 
 class TaskService:
     @staticmethod
     def broadcast_task_update(task, action):
-        print(f"Broadcasting {action} for task {task.id}")
+        logger.info("Broadcasting %s for task %s",action,task.id,)
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             'tasks',
