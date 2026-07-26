@@ -10,6 +10,8 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.views import APIView
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 
 class OrganizationView(GenericAPIView):
     throttle_classes = [UserRateThrottle,AnonRateThrottle]
@@ -116,7 +118,18 @@ class OrganizationDetailView(APIView):
             status=status.HTTP_200_OK
         )
         
-        
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def current_tenant(request,*args,**kwargs):
+    if request.organization:
+        return Response({
+            'organization_id':request.organization.id,
+            'organization_name':request.organization.name,
+        })
+    return Response({
+        'organization': None
+    })
 
 
         

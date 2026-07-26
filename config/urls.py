@@ -1,4 +1,4 @@
-"""
+'''
 URL configuration for config project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
@@ -13,19 +13,20 @@ Class-based views
 Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
+'''
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import (SpectacularAPIView,SpectacularSwaggerView,SpectacularRedocView)
 
-print("CONFIG URLS LOADED")
+print('CONFIG URLS LOADED')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/<str:version>/accounts/',include('accounts.urls')),
     path('api/<str:version>/organizations/',include('organizations.urls')),
     path('api/<str:version>/projects/', include('projects.urls')),
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/schema/swagger-ui/",SpectacularSwaggerView.as_view(url_name="schema"),name="swagger-ui",),
-    path("api/schema/redoc/",SpectacularRedocView.as_view(url_name="schema"),name="redoc",),
+    path('api/v1/tasks/', include('tasks.urls')),
+    path('api/schema/',SpectacularAPIView.as_view(), name='schema'),
+    path('api/schema/swagger-ui/',SpectacularSwaggerView.as_view(url_name='schema'),name='swagger-ui',),
+    path('api/schema/redoc/',SpectacularRedocView.as_view(url_name='schema'),name='redoc',),
 ]

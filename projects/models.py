@@ -14,16 +14,16 @@ class Project(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     updated_at=models.DateTimeField(auto_now=True)
 
-def __str__(self):
-    return self.name
+    def __str__(self):
+        return self.name
 
-class Meta:
-    constraints=[
-        models.UniqueConstraint(
-            fields=['organization','name'],
-            name='unique_project_per_org'
-        )
-    ]
+    class Meta:
+        constraints=[
+            models.UniqueConstraint(
+                fields=['organization','name'],
+                name='unique_project_per_org'
+            )
+        ]
 
 class ExportJob(models.Model):
     class ExportType(models.TextChoices):
@@ -52,6 +52,6 @@ class ExportJob(models.Model):
     completed_at=models.DateTimeField(null=True,blank=True)
     def __str__(self):
         if self.user:
-            return f'{self.user.email} - {self.type}'
+            return f'{self.user.email}-{self.type}'
         else:
-            return f'Deleted User - {self.type}'
+            return f'Deleted User-{self.type}'

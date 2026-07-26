@@ -11,6 +11,11 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,6 +36,9 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
+    'channels',
+    
     #django apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -51,8 +59,8 @@ INSTALLED_APPS = [
     'tasks',
     'common',
     'rest_framework_simplejwt.token_blacklist',
-
     'drf_spectacular',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -61,6 +69,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'organizations.middleware.TenantMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -91,12 +100,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME':'shipstream',
-        'USER': 'mac',
-        'PASSWORD': '',
-        "HOST": "localhost",
-        "PORT": "5432",
+        'ENGINE':'django.db.backends.postgresql',
+        'NAME':os.getenv('DB_NAME'),
+        'USER':os.getenv('DB_USER'),
+        'PASSWORD':os.getenv('DB_PASSWORD'),
+        'HOST':os.getenv('DB_HOST'),
+        'PORT':os.getenv('DB_PORT'),
     }
 }
 
@@ -186,4 +195,34 @@ SPECTACULAR_SETTINGS={
     "DESCRIPTION":"Backend API for Shipstream Project Management System",
     "VERSION":"1.0.0",
     "SERVE_INCLUDE_SCHEMA":False,
+}
+
+CELERY_BROKER_URL = "redis://redis:6379/0"
+CELERY_RESULT_BACKEND = "redis://redis:6379/0"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "UTC"
+
+CACHES={
+    "default":{
+        "BACKEND":"django_redis.cache.RedisCache",
+        "LOCATION":"redis://redis:6379/1",
+        "OPTIONS":{
+            "CLIENT_CLASS":"django_redis.client.DefaultClient",
+        },
+        "KEY_PREFIX":"shipstream",
+    }
+}
+
+
+ASGI_APPLICATION = "config.asgi.application"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("redis", 6379)],
+        },
+    },
 }

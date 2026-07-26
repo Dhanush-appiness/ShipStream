@@ -5,13 +5,14 @@ from rest_framework import status
 from .serializers import RegisterSerializer, LoginSerializer, LogoutSerializer
 from .services import register_user, login_user, logout_user
 from rest_framework.permissions import AllowAny,IsAuthenticated
-from common.permissions import IsAdmin
 from drf_spectacular.utils import extend_schema
 
 @extend_schema(
-    summary="Register User",
-    description="Creates new user account",
-    tags=["Accounts"],
+    request=RegisterSerializer,
+    responses=RegisterSerializer,
+    summary='Register User',
+    description='Creates new user account',
+    tags=['Accounts'],
 )
 class RegisterView(APIView):
     """
@@ -34,9 +35,10 @@ class RegisterView(APIView):
             )
 
 @extend_schema(
-    summary="Login User",
-    description="Authenticate a user and return JWT tokens.",
-    tags=["Accounts"],
+    request=LoginSerializer,
+    summary='Login User',
+    description='Authenticate a user and return JWT tokens.',
+    tags=['Accounts'],
 )
 class LoginView(APIView):
     """
@@ -63,9 +65,10 @@ class LoginView(APIView):
             )
 
 @extend_schema(
-    summary="Logout User",
-    description="Blacklist the refresh token.",
-    tags=["Accounts"],
+    request=LogoutSerializer,
+    summary='Logout User',
+    description='Blacklist the refresh token.',
+    tags=['Accounts'],
 )
 class LogoutView(APIView):
     """
