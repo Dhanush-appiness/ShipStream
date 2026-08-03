@@ -1,6 +1,7 @@
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
-from django.conf import settings
+
 
 class UserManager(BaseUserManager):
     def create_user(self,email,password=None,**extra_fields):
@@ -48,7 +49,7 @@ class PasswordReset(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return self.user.email
-    
+
 class RefreshToken(models.Model):
     user=models.ForeignKey(
         settings.AUTH_USER_MODEL,

@@ -1,10 +1,20 @@
 from django.urls import path
-from .views import (TaskListCreateView,TaskRetrieveUpdateDestroyView,
-                    CommentListCreateView,CommentRetrieveUpdateDestroyView,
-                    LabelListCreateView,LabelRetrieveUpdateDestroyView,
-                    TaskLabelListCreateView,TaskLabelRetrieveUpdateDestroyView,
-                    ActivityLogListView,ActivityLogDetailView,
-                    NotificationListView,NotificationRetrieveView,NotificationReadView,)
+
+from .views import (
+                    ActivityLogDetailView,
+                    ActivityLogListView,
+                    CommentListCreateView,
+                    CommentRetrieveUpdateDestroyView,
+                    LabelListCreateView,
+                    LabelRetrieveUpdateDestroyView,
+                    NotificationListView,
+                    NotificationReadView,
+                    NotificationRetrieveView,
+                    TaskLabelListCreateView,
+                    TaskLabelRetrieveUpdateDestroyView,
+                    TaskListCreateView,
+                    TaskRetrieveUpdateDestroyView,
+)
 
 urlpatterns = [
     #Tasks

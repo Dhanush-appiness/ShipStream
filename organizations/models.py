@@ -1,5 +1,6 @@
-from django.db import models
 from django.conf import settings
+from django.db import models
+
 
 class Organization(models.Model):
     name=models.CharField(max_length=255)
@@ -9,8 +10,13 @@ class Organization(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return self.name
-    
+
 class Membership(models.Model):
+    class RoleChoices(models.TextChoices):
+        OWNER='OWNER','Owner'
+        ADMIN='ADMIN','Admin'
+        MEMBER='MEMBER','Member'
+        GUEST='GUEST','Guest'
     user=models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE
@@ -19,10 +25,15 @@ class Membership(models.Model):
         Organization,
         on_delete=models.CASCADE
     )
-    role=models.CharField(max_length=20)
+    role=models.CharField(
+        max_length=20,
+        choices=RoleChoices.choices,
+        default=RoleChoices.MEMBER
+    )
     joined_at=models.DateTimeField(auto_now_add=True)
+
     def __str__(self):
-        return f'{self.user.email} - {self.organization.name}'
+        return f'{self.user.email}-{self.organization.name}'
     class Meta:
         constraints=[
             models.UniqueConstraint(

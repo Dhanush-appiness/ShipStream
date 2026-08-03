@@ -1,9 +1,14 @@
-from django.db import models
 from django.conf import settings
-from projects.models import Project
+from django.db import models
+
+from common.managers import AllObjectsManager, TaskManager
 from organizations.models import Organization
+from projects.models import Project
+
 
 class Task(models.Model):
+    objects=TaskManager()
+    all_objects=AllObjectsManager()
     project=models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
@@ -27,9 +32,11 @@ class Task(models.Model):
     STATUS_CHOICES=[
         ('TODO','To Do'),
         ('IN_PROGRESS','In Progress'),
-        ('DONE','Done')
+        ('DONE','Done'),
+        ('BLOCKED','Blocked')
     ]
     status=models.CharField(max_length=20,choices=STATUS_CHOICES,default='TODO')
+    position=models.PositiveIntegerField(default=0)
     PRIORITY_CHOICES=[
     ('LOW','Low'),
     ('MEDIUM','Medium'),
@@ -40,7 +47,11 @@ class Task(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     updated_at=models.DateTimeField(auto_now=True)
     due_date=models.DateField(null=True,blank=True)
-    
+
+    def delete(self,*args,**kwargs):
+        self.is_deleted=True
+        self.save(update_fields=['is_deleted'])
+
     def __str__(self):
         return self.title
 
@@ -61,13 +72,14 @@ class Comment(models.Model):
     updated_at=models.DateTimeField(auto_now=True)
     def __str__(self):
         return self.content[:50]
-    
+
 class Label(models.Model):
     organization=models.ForeignKey(
         Organization,
         on_delete=models.CASCADE
     )
-    name=models.CharField(max_length=7,default='#808080')
+    name=models.CharField(max_length=100)
+    color=models.CharField(max_length=7,default='#808080')
     created_at=models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return self.name
@@ -96,8 +108,8 @@ class TaskLabel(models.Model):
             )
         ]
     def __str__(self):
-        return f'{self.task} - {self.label}' 
-        
+        return f'{self.task} - {self.label}'
+
 class ActivityLog(models.Model):
     organization=models.ForeignKey(
         Organization,
@@ -119,7 +131,7 @@ class ActivityLog(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return f'{self.actor} - {self.action}'
-    
+
 class Notification(models.Model):
     user=models.ForeignKey(
         settings.AUTH_USER_MODEL,

@@ -1,6 +1,8 @@
 from rest_framework import serializers
-from .models import Task,Comment,Label,TaskLabel,ActivityLog,Notification
+
 from projects.models import ExportJob
+
+from .models import ActivityLog, Comment, Label, Notification, Task, TaskLabel
 
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -36,13 +38,13 @@ class LabelSerializer(serializers.ModelSerializer):
             'organization',
             'created_at',
         )
-        
-        
+
+
 class TaskLabelSerializer(serializers.ModelSerializer):
     class Meta:
         model=TaskLabel
         fields='__all__'
-        
+
 class ActivityLogSerializer(serializers.ModelSerializer):
     class Meta:
         model=ActivityLog

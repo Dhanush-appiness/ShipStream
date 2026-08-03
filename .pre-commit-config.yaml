@@ -1,0 +1,19 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+
+  - repo: local
+    hooks:
+      - id: mypy-services
+        name: mypy services
+        entry: mypy
+        language: system
+        pass_filenames: false
+        args:
+          - accounts/services.py
+          - organizations/services.py
+          - projects/services.py
+          - tasks/services.py

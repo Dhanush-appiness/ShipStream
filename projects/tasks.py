@@ -1,11 +1,12 @@
 import csv
 import logging
 import os
+
 from celery import shared_task
 from django.conf import settings
-from .models import ExportJob
 from django.utils import timezone
 
+from .models import ExportJob
 
 logger=logging.getLogger(__name__)
 

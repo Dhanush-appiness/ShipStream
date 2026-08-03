@@ -1,10 +1,12 @@
-from django.shortcuts import get_object_or_404
-from .models import Task,Comment,Label,TaskLabel,ActivityLog,Notification
-from projects.models import ExportJob
-from organizations.models import Membership
+import logging
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-import logging
+from django.shortcuts import get_object_or_404
+
+from organizations.models import Membership
+
+from .models import ActivityLog, Comment, Label, Notification, Task, TaskLabel
 
 logger=logging.getLogger(__name__)
 
@@ -23,7 +25,7 @@ class TaskService:
                 'status': task.status,
             },
         )
-    
+
     @staticmethod
     def get_user_organization(user):
         membership=Membership.objects.filter(user=user).select_related('organization').first()
@@ -33,9 +35,8 @@ class TaskService:
 
     @staticmethod
     def get_tasks(organization):
-        return Task.objects.filter(
-            project__organization=organization,
-            is_deleted=False,
+        return Task.objects.for_organization(
+            organization
         ).select_related(
             'project',
             'assignee',
@@ -45,10 +46,8 @@ class TaskService:
     @staticmethod
     def get_task(task_id,organization):
         return get_object_or_404(
-            Task,
+            Task.objects.for_organization(organization),
             id=task_id,
-            project__organization=organization,
-            is_deleted=False,
         )
 
     @staticmethod
@@ -98,18 +97,17 @@ class TaskService:
 
     @staticmethod
     def delete_task(task):
-        task.is_deleted=True
-        task.save(update_fields=['is_deleted'])
+        task.delete()
         ActivityLogService.log(
             task.project.organization,
             task,
             task.created_by,
             'TASK_DELETED',
         )
-        TaskService.broadcast_task_update(task, "deleted")
-        
-        
-        
+        TaskService.broadcast_task_update(task,'deleted')
+
+
+
 class CommentService:
 
     @staticmethod
@@ -153,7 +151,7 @@ class CommentService:
     @staticmethod
     def delete_comment(comment):
         comment.delete()
-        
+
 
 class LabelService:
 
@@ -318,31 +316,3 @@ class NotificationService:
         notification.read_at=timezone.now()
         notification.save(update_fields=['read_at'])
         return notification
-
-
-class ExportJobService:
-
-    @staticmethod
-    def get_jobs(user):
-        organization=TaskService.get_user_organization(user)
-        return ExportJob.objects.filter(
-            organization=organization
-        )
-
-    @staticmethod
-    def get_job(pk,user):
-        organization=TaskService.get_user_organization(user)
-        return get_object_or_404(
-            ExportJob,
-            id=pk,
-            organization=organization,
-        )
-
-    @staticmethod
-    def create_job(serializer, user):
-        organization=TaskService.get_user_organization(user)
-        serializer.save(
-            organization=organization,
-            requested_by=user,
-            status='PENDING',
-        )

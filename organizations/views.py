@@ -1,24 +1,31 @@
-from rest_framework.response import Response
-from rest_framework import status
-from .serializers import OrganizationSerializer
-from .services import create_organization, list_organizations, get_organization,update_organization, delete_organization
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.generics import GenericAPIView
-from .pagination import OrganizationPagination
-from .filters import OrganizationFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
-from rest_framework.views import APIView
-from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework.views import APIView
+
+from .filters import OrganizationFilter
+from .pagination import OrganizationPagination
+from .serializers import OrganizationSerializer
+from .services import (
+    create_organization,
+    delete_organization,
+    get_organization,
+    list_organizations,
+    update_organization,
+)
+
 
 class OrganizationView(GenericAPIView):
     throttle_classes = [UserRateThrottle,AnonRateThrottle]
     """
     Handle organization creation and listing.
     """
-    
+
     permission_classes=[IsAuthenticated]
     serializer_class=OrganizationSerializer
     pagination_class=OrganizationPagination
@@ -34,7 +41,7 @@ class OrganizationView(GenericAPIView):
         """
         Create a new organization.
         """
-    
+
         serializer=OrganizationSerializer(data=request.data)
         if serializer.is_valid():
             organization=create_organization(request.user,serializer.validated_data)
@@ -55,7 +62,7 @@ class OrganizationView(GenericAPIView):
         """
         Retrieve all organizations.
         """
-        
+
         queryset=list_organizations()
         queryset=self.filter_queryset(queryset)
         page=self.paginate_queryset(queryset)
@@ -70,17 +77,17 @@ class OrganizationDetailView(APIView):
     """
     Handle operations on a single organization.
     """
-     
+
     permission_classes=[IsAuthenticated]
     def get(self,request,slug,*args,**kwargs):
         """
         Retrieve a single organization by slug.
         """
-        
+
         organization=get_organization(slug)
         serializer=OrganizationSerializer(organization)
         return Response(serializer.data)
-    
+
     def put(self,request,slug,*args,**kwargs):
         """
         Update the organization
@@ -105,7 +112,7 @@ class OrganizationDetailView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
-    
+
     def delete(self,request,slug,*args,**kwargs):
         """
         Delete the organization
@@ -117,7 +124,7 @@ class OrganizationDetailView(APIView):
             },
             status=status.HTTP_200_OK
         )
-        
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -132,4 +139,3 @@ def current_tenant(request,*args,**kwargs):
     })
 
 
-        

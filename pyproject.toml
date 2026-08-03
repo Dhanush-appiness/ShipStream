@@ -1,0 +1,24 @@
+[tool.ruff]
+line-length=100
+target-version='py313'
+exclude=[
+    'migrations',
+    '.venv',
+    'venv',
+]
+
+[tool.ruff.lint]
+select=[
+    'E',
+    'F',
+    'W',
+    'I',
+]
+ignore=[
+    'E501',
+]
+
+[tool.ruff.format]
+quote-style='single'
+indent-style='space'
+line-ending='auto'

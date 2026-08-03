@@ -1,8 +1,13 @@
-from django.db import models
-from organizations.models import Organization
 from django.conf import settings
+from django.db import models
+
+from common.managers import AllObjectsManager, ProjectManager
+from organizations.models import Organization
+
 
 class Project(models.Model):
+    objects=ProjectManager()
+    all_objects=AllObjectsManager()
     organization=models.ForeignKey(
         Organization,
         on_delete=models.CASCADE
@@ -14,6 +19,10 @@ class Project(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     updated_at=models.DateTimeField(auto_now=True)
 
+    def delete(self,*args,**kwargs):
+        self.is_deleted=True
+        self.save(update_fields=['is_deleted'])
+
     def __str__(self):
         return self.name
 
@@ -24,6 +33,32 @@ class Project(models.Model):
                 name='unique_project_per_org'
             )
         ]
+
+
+class ProjectMember(models.Model):
+    project=models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='members'
+    )
+    user=models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='project_memberships'
+    )
+    joined_at=models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.user.email}-{self.project.name}'
+
+    class Meta:
+        constraints=[
+            models.UniqueConstraint(
+                fields=['project','user'],
+                name='unique_project_member'
+            )
+        ]
+
 
 class ExportJob(models.Model):
     class ExportType(models.TextChoices):
@@ -45,7 +80,7 @@ class ExportJob(models.Model):
         on_delete=models.CASCADE,
         related_name='export_jobs'
     )
-    type=models.CharField(max_length=20,null=True,blank=True)
+    type=models.CharField(max_length=20,choices=ExportType.choices,null=True,blank=True)
     status=models.CharField(max_length=20,choices=StatusChoices.choices,default=StatusChoices.Pending)
     file_url=models.URLField(null=True,blank=True)
     created_at=models.DateTimeField(auto_now_add=True)

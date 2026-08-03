@@ -1,5 +1,6 @@
 from django.urls import path
-from .views import OrganizationView,OrganizationDetailView,current_tenant
+
+from .views import OrganizationDetailView, OrganizationView
 
 urlpatterns=[
     path('create/',OrganizationView.as_view(),name='create-organization'),

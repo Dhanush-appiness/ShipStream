@@ -1,11 +1,12 @@
-from django.shortcuts import render
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from .serializers import RegisterSerializer, LoginSerializer, LogoutSerializer
-from .services import register_user, login_user, logout_user
-from rest_framework.permissions import AllowAny,IsAuthenticated
 from drf_spectacular.utils import extend_schema
+from rest_framework import status
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .serializers import LoginSerializer, LogoutSerializer, RegisterSerializer
+from .services import login_user, logout_user, register_user
+
 
 @extend_schema(
     request=RegisterSerializer,
@@ -18,13 +19,13 @@ class RegisterView(APIView):
     """
     Handle user registration requests.
     """
-    
+
     permission_classes=[AllowAny]
     def post(self,request,*args,**kwargs):
         """
         Register a new user.
         """
-        
+
         serializer=RegisterSerializer(data=request.data)
         if serializer.is_valid(raise_exception=True):
             user=register_user(serializer.validated_data)
@@ -44,13 +45,13 @@ class LoginView(APIView):
     """
     Handle user login requests.
     """
-    
+
     permission_classes=[AllowAny]
     def post(self,request,*args,**kwargs):
         """
         Authenticate the user and return JWT tokens.
         """
-        
+
         serializer=LoginSerializer(data=request.data)
         if serializer.is_valid(raise_exception=True):
             login_data=login_user(serializer.validated_data)
@@ -74,7 +75,7 @@ class LogoutView(APIView):
     """
     Handle user logout requests.
     """
-    
+
     permission_classes=[IsAuthenticated]
     def post(self,request,*args,**kwargs):
         """

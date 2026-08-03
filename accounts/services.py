@@ -1,8 +1,11 @@
-from .models import User
+import logging
+from typing import cast
+
 from django.contrib.auth import authenticate
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
-import logging 
+
+from .models import User
 
 logger=logging.getLogger(__name__)
 
@@ -10,7 +13,7 @@ def register_user(validated_data):
     """
     Register a new user after verifying that the email is unique.
     """
-    
+
     email=validated_data['email']
     logger.info(f'Registration attempt for email: {email}')
     try:
@@ -41,7 +44,7 @@ def login_user(validated_data):
         #if not user.is_verified:
          #   logger.warning(f'Email not verified: {email}')
           #  raise AuthenticationFailed("Please verify your email first!")
-        refresh=RefreshToken.for_user(user)
+        refresh=cast(RefreshToken,RefreshToken.for_user(user))
         logger.info(f'User logged in successfully: {email}')
         return{
             'user':user,
@@ -56,13 +59,13 @@ def logout_user(validated_data):
     """
     Blacklist the user's refresh token to log them out.
     """
-    
+
     refresh=validated_data['refresh']
-    logger.info(f'Logout attempt')
+    logger.info('Logout attempt')
     try:
         token=RefreshToken(refresh)
         token.blacklist()
-        logger.info(f'User logged out successfully')
+        logger.info('User logged out successfully')
     except Exception as e:
         logger.error(f'Logout failed: {str(e)}')
         raise

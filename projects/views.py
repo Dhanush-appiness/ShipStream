@@ -1,17 +1,23 @@
-from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
-from .models import Project,ExportJob
-from .serializers import ProjectSerializer,ExportJobSerializer
-from .services import ProjectService,ExportJobService
-from common.permissions import HasOrganizationAccess
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from common.permissions import (
+    HasOrganizationAccess,
+    IsOrganizationAdmin,
+    IsOrganizationMemberOrReadOnly,
+)
+
+from .serializers import ExportJobSerializer, ProjectSerializer
+from .services import ExportJobService, ProjectService
 
 
 @method_decorator(cache_page(60), name='dispatch')
 class ProjectListCreateView(generics.ListCreateAPIView):
     serializer_class=ProjectSerializer
-    permission_classes=[IsAuthenticated,HasOrganizationAccess]
+    permission_classes=[IsAuthenticated,HasOrganizationAccess,IsOrganizationMemberOrReadOnly,]
 
     def get_queryset(self):
         return ProjectService.get_projects(self.request.organization)
@@ -25,7 +31,7 @@ class ProjectListCreateView(generics.ListCreateAPIView):
 
 class ProjectRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class=ProjectSerializer
-    permission_classes=[IsAuthenticated,HasOrganizationAccess]
+    permission_classes=[IsAuthenticated,HasOrganizationAccess,IsOrganizationMemberOrReadOnly,]
 
     def get_object(self):
         return ProjectService.get_project(
@@ -50,7 +56,7 @@ class ProjectRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
 
 class ExportJobListCreateView(generics.ListCreateAPIView):
     serializer_class=ExportJobSerializer
-    permission_classes=[IsAuthenticated,HasOrganizationAccess]
+    permission_classes=[IsAuthenticated,HasOrganizationAccess,IsOrganizationMemberOrReadOnly,]
 
     def get_queryset(self):
         return ExportJobService.get_jobs(
@@ -74,3 +80,20 @@ class ExportJobRetrieveView(generics.RetrieveAPIView):
             self.request.organization,
             self.kwargs['pk'],
         )
+
+
+class ProjectArchiveView(generics.UpdateAPIView):
+    serializer_class=ProjectSerializer
+    permission_classes=[
+        IsAuthenticated,
+        HasOrganizationAccess,
+        IsOrganizationAdmin,
+    ]
+
+    def update(self,request,*args,**kwargs):
+        project=ProjectService.archive_project(
+            self.request.organization,
+            self.kwargs['pk']
+        )
+        serializer=self.get_serializer(project)
+        return Response(serializer.data)

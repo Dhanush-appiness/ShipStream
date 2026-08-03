@@ -1,6 +1,8 @@
+import logging
+
 from django.utils.text import slugify
-from .models import Organization, Membership
-import logging 
+
+from .models import Membership, Organization
 
 logger=logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ def list_organizations():
     """
     Retrieve all organizations.
     """
-    
+
     logger.info('Retrieving all organizations')
     try:
         organizations=Organization.objects.all()
@@ -46,7 +48,7 @@ def get_organization(slug):
     """
     Retrieve an organization using its slug.
     """
-    
+
     logger.info(f'Retrieving organization with slug: {slug}')
     try:
         organization=Organization.objects.get(slug=slug)
@@ -60,7 +62,7 @@ def update_organization(slug,validated_data):
     """
     Update organization
     """
-    
+
     logger.info(f'Updating organization: {slug}')
     try:
         organization=Organization.objects.get(slug=slug)
@@ -73,12 +75,12 @@ def update_organization(slug,validated_data):
     except Exception as e:
         logger.error(f'Failed to update organization: {slug}: {str(e)}')
         raise
-    
+
 def delete_organization(slug):
     """
     Delete organization
     """
-    
+
     logger.info(f'Deleting organization: {slug}')
     try:
         organization=Organization.objects.get(slug=slug)
@@ -88,4 +90,3 @@ def delete_organization(slug):
     except Exception as e:
         logger.error(f'Failed to delete organization: {slug}: {str(e)}')
         raise
-    

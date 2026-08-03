@@ -1,4 +1,4 @@
-from organizations.models import Organization, Membership
+from organizations.models import Membership
 
 
 class TenantMiddleware:

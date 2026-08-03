@@ -1,6 +1,8 @@
 from django.shortcuts import get_object_or_404
+
 from organizations.models import Membership
-from .models import Project,ExportJob
+
+from .models import ExportJob, Project, ProjectMember
 from .tasks import generate_export
 
 
@@ -18,18 +20,15 @@ class ProjectService:
 
     @staticmethod
     def get_projects(organization):
-        return Project.objects.filter(
-            organization=organization,
-            is_deleted=False
+        return Project.objects.for_organization(
+            organization
         )
 
     @staticmethod
     def get_project(organization,project_id):
         return get_object_or_404(
-            Project,
+            Project.objects.for_organization(organization),
             id=project_id,
-            organization=organization,
-            is_deleted=False,
         )
 
     @staticmethod
@@ -38,7 +37,7 @@ class ProjectService:
             organization=organization,
             **validated_data
         )
-    
+
     @staticmethod
     def update_project(organization,project_id,validated_data):
         project=ProjectService.get_project(
@@ -49,16 +48,65 @@ class ProjectService:
             setattr(project,field,value)
         project.save()
         return project
-    
+
     @staticmethod
     def delete_project(organization,project_id):
         project=ProjectService.get_project(
             organization,
             project_id
         )
-        project.is_deleted=True
-        project.save()
+        project.delete()
         return project
+
+    @staticmethod
+    def archive_project(organization,project_id):
+        project=ProjectService.get_project(
+            organization,
+            project_id
+        )
+        project.status='ARCHIVED'
+        project.save(update_fields=['status'])
+        return project
+
+
+class ProjectMemberService:
+
+    @staticmethod
+    def get_members(organization,project_id):
+        project=ProjectService.get_project(
+            organization,
+            project_id
+        )
+        return ProjectMember.objects.filter(
+            project=project
+        ).select_related(
+            'user',
+            'project'
+        )
+
+    @staticmethod
+    def add_member(organization,project_id,user):
+        project=ProjectService.get_project(
+            organization,
+            project_id
+        )
+
+        membership=Membership.objects.filter(
+            user=user,
+            organization=organization,
+        ).exists()
+
+        if not membership:
+            raise ValueError(
+                'User must belong to the organization.'
+            )
+
+        project_member,created=ProjectMember.objects.get_or_create(
+            project=project,
+            user=user,
+        )
+
+        return project_member
 
 
 class ExportJobService:
