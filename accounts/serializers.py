@@ -1,3 +1,4 @@
+from django.contrib.auth.password_validation import validate_password as django_validate_password
 from rest_framework import serializers
 
 from .models import User
@@ -20,3 +21,12 @@ class LoginSerializer(serializers.Serializer):
 
 class LogoutSerializer(serializers.Serializer):
     refresh=serializers.CharField()
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email=serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    token=serializers.CharField(max_length=255)
+    new_password=serializers.CharField(min_length=8,write_only=True,validators=[django_validate_password],)

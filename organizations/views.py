@@ -8,10 +8,18 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
+from common.permissions import IsOrganizationAdmin
+
 from .filters import OrganizationFilter
 from .pagination import OrganizationPagination
-from .serializers import OrganizationSerializer
+from .serializers import (
+    InvitationAcceptSerializer,
+    InvitationCreateSerializer,
+    OrganizationSerializer,
+)
 from .services import (
+    accept_invitation,
+    create_invitation,
     create_organization,
     delete_organization,
     get_organization,
@@ -138,4 +146,40 @@ def current_tenant(request,*args,**kwargs):
         'organization': None
     })
 
+class InvitationCreateView(APIView):
+    permission_classes=[IsAuthenticated,IsOrganizationAdmin]
+    def post(self,request,*args,**kwargs):
+        serializer=InvitationCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        invitation=create_invitation(
+            request.user,
+            request.organization,
+            serializer.validated_data,
+        )
+        return Response(
+            {
+                'message':'Invitation created successfully',
+                'email':invitation.email,
+                'role':invitation.role,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
+
+class InvitationAcceptView(APIView):
+    permission_classes=[IsAuthenticated]
+    def post(self,request,*args,**kwargs):
+        serializer=InvitationAcceptSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        membership=accept_invitation(
+        request.user,
+        serializer.validated_data,
+    )
+        return Response(
+        {
+            'message':'Invitation accepted successfully',
+            'organization':membership.organization.name,
+            'role':membership.role,
+        },
+        status=status.HTTP_200_OK,
+    )

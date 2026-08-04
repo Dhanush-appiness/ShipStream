@@ -4,8 +4,22 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import LoginSerializer, LogoutSerializer, RegisterSerializer
-from .services import login_user, logout_user, register_user
+from accounts.models import User
+
+from .serializers import (
+    LoginSerializer,
+    LogoutSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
+    RegisterSerializer,
+)
+from .services import (
+    confirm_password_reset,
+    login_user,
+    logout_user,
+    register_user,
+    request_password_reset,
+)
 
 
 @extend_schema(
@@ -90,3 +104,37 @@ class LogoutView(APIView):
                 },
                 status=status.HTTP_200_OK
             )
+
+class PasswordResetRequestView(APIView):
+    permission_classes=[AllowAny]
+
+    def post(self,request,*args,**kwargs):
+        serializer=PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email=serializer.validated_data['email']
+        try:
+            request_password_reset(email)
+        except User.DoesNotExist:
+            pass
+        return Response(
+            {
+                'message':'If an account exists with this email, a password reset link has been sent.'
+            },
+            status=status.HTTP_200_OK,
+        )
+
+class PasswordResetConfirmView(APIView):
+    permission_classes=[AllowAny]
+
+    def post(self,request,*args,**kwargs):
+        serializer=PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token=serializer.validated_data['token']
+        new_password=serializer.validated_data['new_password']
+        confirm_password_reset(token,new_password=new_password)
+        return Response(
+            {
+                'message':'Password reset successfully!'
+            },
+            status=status.HTTP_200_OK,
+        )

@@ -63,7 +63,7 @@ class Invitation(models.Model):
         null=True,
         related_name='invitation'
     )
-    email=models.EmailField(unique=True)
+    email=models.EmailField()
     token=models.CharField(max_length=255,unique=True)
     role=models.CharField(max_length=20,choices=RoleChoices.choices,default=RoleChoices.MEMBER)
     status=models.CharField(max_length=20,choices=StatusChoices.choices,default=StatusChoices.PENDING,db_index=True)

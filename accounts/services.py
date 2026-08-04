@@ -1,11 +1,16 @@
 import logging
+import secrets
+from datetime import timedelta
 from typing import cast
 
 from django.contrib.auth import authenticate
+from django.db import transaction
+from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import User
+from .models import PasswordReset, User
+from .tasks import send_password_reset_email
 
 logger=logging.getLogger(__name__)
 
@@ -69,3 +74,34 @@ def logout_user(validated_data):
     except Exception as e:
         logger.error(f'Logout failed: {str(e)}')
         raise
+
+
+def request_password_reset(email):
+    user=User.objects.get(email=email)
+    token=secrets.token_urlsafe(32)
+    expires_at=timezone.now()+timedelta(hours=1)
+    password_reset=PasswordReset.objects.create(
+        user=user,
+        token=token,
+        expires_at=expires_at,
+    )
+    transaction.on_commit(
+    lambda:send_password_reset_email.delay(password_reset.id)
+)
+    return password_reset
+
+@transaction.atomic
+def confirm_password_reset(token,new_password):
+    password_reset=PasswordReset.objects.filter(token=token).first()
+    if password_reset is None:
+        raise ValueError('Invalid password reset token')
+    if password_reset.used_at is not None:
+        raise ValueError('Password reset token has already been used')
+    if password_reset.expires_at<=timezone.now():
+        raise ValueError('Password reset token has expired')
+    user=password_reset.user
+    user.set_password(new_password)
+    user.save(update_fields=['password'])
+    password_reset.used_at=timezone.now()
+    password_reset.save(update_fields=['used_at'])
+    return user
