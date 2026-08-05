@@ -1,9 +1,13 @@
+from typing import cast
+
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from common.permissions import HasOrganizationAccess, IsOrganizationMemberOrReadOnly
+from common.types import OrganizationRequest
 
 from .filters import TaskFilter
 from .pagination import ActivityCursorPagination
@@ -13,6 +17,7 @@ from .serializers import (
     LabelSerializer,
     NotificationSerializer,
     TaskLabelSerializer,
+    TaskReorderSerializer,
     TaskSerializer,
 )
 from .services import (
@@ -32,13 +37,23 @@ class TaskListCreateView(generics.ListCreateAPIView):
     filterset_class=TaskFilter
 
     def get_queryset(self):
-        return TaskService.get_tasks(self.request.organization)
+        query=self.request.query_params.get('search')
+
+        if query:
+            return TaskService.search_tasks(
+                cast(OrganizationRequest,self.request).organization,
+                query,
+            )
+
+        return TaskService.get_tasks(
+            cast(OrganizationRequest,self.request).organization
+        )
 
     def perform_create(self,serializer):
         TaskService.create_task(
             serializer,
             self.request.user,
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
 
@@ -49,7 +64,7 @@ class TaskRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     def get_object(self):
         return TaskService.get_task(
             self.kwargs['pk'],
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
     def perform_update(self,serializer):
@@ -63,6 +78,40 @@ class TaskRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         TaskService.delete_task(instance)
 
 
+class TaskReorderView(APIView):
+    permission_classes=[IsAuthenticated,HasOrganizationAccess,IsOrganizationMemberOrReadOnly,]
+
+    def patch(self,request,pk,*args,**kwargs):
+        serializer=TaskReorderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        task=TaskService.reorder_task(
+            request.organization,
+            pk,
+            serializer.validated_data['status'],
+            serializer.validated_data['position'],
+        )
+
+        return Response(
+            TaskSerializer(task).data,
+            status=status.HTTP_200_OK,
+        )
+
+class TaskDashboardView(APIView):
+    permission_classes=[
+        IsAuthenticated,
+        HasOrganizationAccess,
+    ]
+
+    def get(self,request,*args,**kwargs):
+        dashboard=TaskService.get_dashboard(
+            request.organization
+        )
+
+        return Response(
+            dashboard,
+            status=status.HTTP_200_OK,
+        )
 
 class CommentListCreateView(generics.ListCreateAPIView):
     serializer_class=CommentSerializer

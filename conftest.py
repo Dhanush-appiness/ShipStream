@@ -3,6 +3,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import User
 from organizations.models import Membership, Organization
+from projects.models import Project
 
 
 @pytest.fixture
@@ -76,3 +77,11 @@ def authenticated_client(api_client,user,membership,organization):
         HTTP_X_ORG_ID=str(organization.id)
     )
     return api_client
+
+@pytest.fixture
+def project(organization):
+    return Project.objects.create(
+        organization=organization,
+        name='Test Project',
+        description='Test project description',
+    )

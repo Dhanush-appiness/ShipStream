@@ -1,8 +1,13 @@
 import logging
+import re
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+from django.db import connection, transaction
+from django.db.models import Count, F, Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from organizations.models import Membership
 
@@ -41,6 +46,83 @@ class TaskService:
             'project',
             'assignee',
             'created_by',
+        ).order_by(
+            'status','position','id'
+            )
+
+    @staticmethod
+    def get_dashboard(organization):
+        tasks=Task.objects.for_organization(organization)
+
+        status_counts={
+            'TODO':tasks.filter(status='TODO').count(),
+            'IN_PROGRESS':tasks.filter(status='IN_PROGRESS').count(),
+            'DONE':tasks.filter(status='DONE').count(),
+            'BLOCKED':tasks.filter(status='BLOCKED').count(),
+        }
+
+        overdue=tasks.filter(
+            due_date__lt=timezone.localdate(),
+        ).exclude(
+            status='DONE',
+        ).count()
+
+        workload=list(
+            tasks.filter(
+                assignee__isnull=False,
+            ).exclude(
+                status='DONE',
+            ).values(
+                'assignee_id',
+                'assignee__email',
+            ).annotate(
+                task_count=Count('id'),
+            ).order_by(
+                '-task_count',
+                'assignee_id',
+            )
+        )
+
+        return {
+            'status_counts':status_counts,
+            'overdue':overdue,
+            'workload':workload,
+        }
+
+    @staticmethod
+    def search_tasks(organization,query):
+        tasks=TaskService.get_tasks(organization)
+
+        if not query:
+            return tasks
+
+        if connection.vendor!='postgresql':
+            return tasks.filter(
+                Q(title__icontains=query) |
+                Q(description__icontains=query)
+            )
+
+        search_vector=SearchVector(
+            'title',
+            weight='A',
+        ) + SearchVector(
+            'description',
+            weight='B',
+        )
+
+        search_query=SearchQuery(query)
+
+        return tasks.annotate(
+            search=search_vector,
+            rank=SearchRank(
+                search_vector,
+                search_query,
+            ),
+        ).filter(
+            search=search_query,
+        ).order_by(
+            '-rank',
+            'id',
         )
 
     @staticmethod
@@ -106,6 +188,54 @@ class TaskService:
         )
         TaskService.broadcast_task_update(task,'deleted')
 
+    @staticmethod
+    @transaction.atomic
+    def reorder_task(organization,task_id,status,position):
+        task=get_object_or_404(
+            Task.objects.for_organization(organization),
+            id=task_id,
+        )
+        old_status=task.status
+        old_position=task.position
+        if old_status==status:
+            if old_position<position:
+                Task.objects.filter(
+                    project=task.project,
+                    status=status,
+                    position__gt=old_position,
+                    position__lte=position,
+                ).update(
+                    position=F('position')-1
+                )
+            elif old_position>position:
+                Task.objects.filter(
+                    project=task.project,
+                    status=status,
+                    position__gte=position,
+                    position__lt=old_position,
+                ).update(
+                    position=F('position')+1
+                )
+        else:
+            Task.objects.filter(
+                project=task.project,
+                status=old_status,
+                position__gt=old_position,
+            ).update(
+                position=F('position')-1
+            )
+            Task.objects.filter(
+                project=task.project,
+                status=status,
+                position__gte=position,
+            ).update(
+                position=F('position')+1
+            )
+        task.status=status
+        task.position=position
+        task.save(update_fields=['status','position'])
+        return task
+
 
 
 class CommentService:
@@ -119,12 +249,24 @@ class CommentService:
         )
 
     @staticmethod
-    def create_comment(serializer, user):
+    def extract_mentions(content):
+        return re.findall(
+            r'@([\w\.-]+@[\w\.-]+\.\w+)',
+            content,
+        )
+
+    @staticmethod
+    def create_comment(serializer,user):
         task=serializer.validated_data['task']
         organization=TaskService.get_user_organization(user)
+
         if task.project.organization!=organization:
-            raise ValueError("Cannot comment on another organization's task.")
-        serializer.save(author=user)
+            raise ValueError(
+                "Cannot comment on another organization's task."
+            )
+
+        comment=serializer.save(author=user)
+
         ActivityLogService.log(
             organization,
             task,
@@ -132,8 +274,35 @@ class CommentService:
             'COMMENT_ADDED',
         )
 
+        mentioned_emails=CommentService.extract_mentions(
+            comment.content
+        )
+
+        mentioned_memberships=Membership.objects.filter(
+            organization=organization,
+            user__email__in=mentioned_emails,
+        ).select_related('user')
+
+        from .tasks import send_mention_notification_email
+
+        for membership in mentioned_memberships:
+            if membership.user==user:
+                continue
+
+            notification=NotificationService.create_notification(
+                membership.user,
+                task,
+                'MENTION',
+                'You were mentioned in a comment',
+                f"{user.email} mentioned you in '{task.title}'.",
+            )
+
+            send_mention_notification_email.delay(
+                notification.id
+            )
+
     @staticmethod
-    def get_comment(comment_id, user):
+    def get_comment(comment_id,user):
         organization=TaskService.get_user_organization(user)
         return get_object_or_404(
             Comment,

@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from celery import shared_task
 from django.utils import timezone
@@ -11,6 +12,6 @@ logger=logging.getLogger(__name__)
 def cleanup_old_exports():
     deleted,_=ExportJob.objects.filter(
         status=ExportJob.StatusChoices.Completed,
-        completed_at__lt=timezone.now()-timezone.timedelta(days=30),
+        completed_at__lt=timezone.now()-timedelta(days=30),
     ).delete()
     logger.info(f'Deleted{deleted}old export jobs.')

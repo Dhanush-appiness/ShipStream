@@ -10,16 +10,20 @@ from .views import (
                     NotificationListView,
                     NotificationReadView,
                     NotificationRetrieveView,
+                    TaskDashboardView,
                     TaskLabelListCreateView,
                     TaskLabelRetrieveUpdateDestroyView,
                     TaskListCreateView,
+                    TaskReorderView,
                     TaskRetrieveUpdateDestroyView,
 )
 
 urlpatterns = [
     #Tasks
     path('',TaskListCreateView.as_view(),name='task-list-create',),
+    path('dashboard/',TaskDashboardView.as_view(),name='task-dashboard',),
     path('<int:pk>/',TaskRetrieveUpdateDestroyView.as_view(),name='task-detail',),
+    path('<int:pk>/reorder/',TaskReorderView.as_view(),name='task-reorder',),
     #Comments
     path('<int:task_id>/comments/',CommentListCreateView.as_view(),name='comment-list-create',),
     path('comments/<int:pk>/',CommentRetrieveUpdateDestroyView.as_view(),name='comment-detail',),

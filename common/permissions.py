@@ -1,9 +1,10 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
+from common.types import OrganizationRequest
 from organizations.models import Membership
 
 
-def get_request_organization(request):
+def get_request_organization(request:OrganizationRequest,):
     organization=getattr(request,'organization',None)
     if organization is not None:
         return organization

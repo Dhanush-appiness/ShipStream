@@ -17,6 +17,12 @@ class TaskSerializer(serializers.ModelSerializer):
             'is_deleted',
         )
 
+class TaskReorderSerializer(serializers.Serializer):
+    status=serializers.ChoiceField(
+        choices=Task.STATUS_CHOICES
+    )
+    position=serializers.IntegerField(min_value=0)
+
 class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model=Comment

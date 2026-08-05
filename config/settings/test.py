@@ -21,3 +21,9 @@ CELERY_TASK_EAGER_PROPAGATES=True
 
 DEFAULT_FROM_EMAIL='noreply@shipstream.test'
 FRONTEND_URL='http://testserver'
+
+CHANNEL_LAYERS={
+    'default':{
+        'BACKEND':'channels.layers.InMemoryChannelLayer',
+    }
+}
