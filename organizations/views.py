@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
-from common.permissions import IsOrganizationAdmin
+from common.permissions import IsOrganizationAdmin, get_request_organization
 
 from .filters import OrganizationFilter
 from .pagination import OrganizationPagination
@@ -58,6 +58,7 @@ class OrganizationView(GenericAPIView):
             return Response(
                 {
                     'message':'Organization created successfully!',
+                    'id':organization.id,
                     'name':organization.name,
                     'slug':organization.slug,
                 },
@@ -115,6 +116,7 @@ class OrganizationDetailView(APIView):
             return Response(
                 {
                     'message':'Organization updated successfully!',
+                    'id':updated_organization.id,
                     'name':updated_organization.name,
                     'slug':updated_organization.slug,
                 },
@@ -145,10 +147,11 @@ class OrganizationDetailView(APIView):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def current_tenant(request,*args,**kwargs):
-    if request.organization:
+    organization=get_request_organization(request)
+    if organization:
         return Response({
-            'organization_id':request.organization.id,
-            'organization_name':request.organization.name,
+            'organization_id':organization.id,
+            'organization_name':organization.name,
         })
     return Response({
         'organization': None

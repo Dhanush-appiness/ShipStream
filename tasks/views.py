@@ -2,11 +2,16 @@ from typing import cast
 
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
+from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from common.permissions import HasOrganizationAccess, IsOrganizationMemberOrReadOnly
+from common.permissions import (
+    HasOrganizationAccess,
+    IsOrganizationAdmin,
+    IsOrganizationMemberOrReadOnly,
+)
 from common.types import OrganizationRequest
 
 from .filters import TaskFilter
@@ -33,8 +38,9 @@ from .services import (
 class TaskListCreateView(generics.ListCreateAPIView):
     serializer_class=TaskSerializer
     permission_classes=[IsAuthenticated,HasOrganizationAccess,IsOrganizationMemberOrReadOnly,]
-    filter_backends=[DjangoFilterBackend]
+    filter_backends=[DjangoFilterBackend,OrderingFilter]
     filterset_class=TaskFilter
+    ordering_fields=['created_at','due_date','priority','position','status']
 
     def get_queryset(self):
         query=self.request.query_params.get('search')
@@ -86,10 +92,25 @@ class TaskReorderView(APIView):
         serializer.is_valid(raise_exception=True)
 
         task=TaskService.reorder_task(
-            request.organization,
+            cast(OrganizationRequest,request).organization,
             pk,
             serializer.validated_data['status'],
             serializer.validated_data['position'],
+        )
+
+        return Response(
+            TaskSerializer(task).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class TaskRestoreView(APIView):
+    permission_classes=[IsAuthenticated,HasOrganizationAccess,IsOrganizationAdmin,]
+
+    def patch(self,request,pk,*args,**kwargs):
+        task=TaskService.restore_task(
+            cast(OrganizationRequest,request).organization,
+            pk,
         )
 
         return Response(
@@ -105,7 +126,7 @@ class TaskDashboardView(APIView):
 
     def get(self,request,*args,**kwargs):
         dashboard=TaskService.get_dashboard(
-            request.organization
+            cast(OrganizationRequest,request).organization
         )
 
         return Response(
@@ -120,14 +141,14 @@ class CommentListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return CommentService.get_comments(
             self.kwargs['task_id'],
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
     def perform_create(self,serializer):
         CommentService.create_comment(
             serializer,
             self.request.user,
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
 
@@ -140,7 +161,7 @@ class CommentRetrieveUpdateDestroyView(
     def get_object(self):
         return CommentService.get_comment(
             self.kwargs['pk'],
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
     def perform_update(self,serializer):
@@ -160,13 +181,13 @@ class LabelListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return LabelService.get_labels(
-            self.request.organization
+            cast(OrganizationRequest,self.request).organization
         )
 
     def perform_create(self, serializer):
         LabelService.create_label(
             serializer,
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
 
@@ -179,7 +200,7 @@ class LabelRetrieveUpdateDestroyView(
     def get_object(self):
         return LabelService.get_label(
             self.kwargs['pk'],
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
     def perform_update(self,serializer):
@@ -200,13 +221,13 @@ class TaskLabelListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return TaskLabelService.get_task_labels(
-            self.request.organization
+            cast(OrganizationRequest,self.request).organization
         )
 
     def perform_create(self,serializer):
         TaskLabelService.create_task_label(
             serializer,
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
 
@@ -219,7 +240,7 @@ class TaskLabelRetrieveUpdateDestroyView(
     def get_object(self):
         return TaskLabelService.get_task_label(
             self.kwargs['pk'],
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
     def perform_update(self,serializer):
@@ -240,7 +261,7 @@ class ActivityLogListView(generics.ListAPIView):
 
     def get_queryset(self):
         return ActivityLogService.get_logs(
-            self.request.organization
+            cast(OrganizationRequest,self.request).organization
         )
 
 
@@ -251,7 +272,7 @@ class ActivityLogDetailView(generics.RetrieveAPIView):
     def get_object(self):
         return ActivityLogService.get_log(
             self.kwargs['pk'],
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
 
@@ -262,7 +283,7 @@ class NotificationListView(generics.ListAPIView):
     def get_queryset(self):
         return NotificationService.get_notifications(
             self.request.user,
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
 class NotificationRetrieveView(generics.RetrieveAPIView):
@@ -273,7 +294,7 @@ class NotificationRetrieveView(generics.RetrieveAPIView):
         return NotificationService.get_notification(
             self.kwargs['pk'],
             self.request.user,
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
 
@@ -285,7 +306,7 @@ class NotificationReadView(generics.UpdateAPIView):
         return NotificationService.get_notification(
             self.kwargs['pk'],
             self.request.user,
-            self.request.organization,
+            cast(OrganizationRequest,self.request).organization,
         )
 
     def update(self, request, *args, **kwargs):

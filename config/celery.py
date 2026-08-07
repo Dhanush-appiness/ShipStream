@@ -16,4 +16,11 @@ app.conf.beat_schedule={
             day_of_week='monday',
         ),
     },
+    'cleanup-old-exports':{
+        'task':'common.tasks.cleanup_old_exports',
+        'schedule':crontab(
+            hour=3,
+            minute=0,
+        ),
+    },
 }

@@ -8,7 +8,21 @@ from .models import ActivityLog, Comment, Label, Notification, Task, TaskLabel
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model=Task
-        fields='__all__'
+        fields=[
+            'id',
+            'project',
+            'assignee',
+            'created_by',
+            'title',
+            'description',
+            'status',
+            'position',
+            'priority',
+            'is_deleted',
+            'created_at',
+            'updated_at',
+            'due_date',
+        ]
         read_only_fields=(
             'id',
             'created_by',

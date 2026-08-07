@@ -14,4 +14,4 @@ def cleanup_old_exports():
         status=ExportJob.StatusChoices.Completed,
         completed_at__lt=timezone.now()-timedelta(days=30),
     ).delete()
-    logger.info(f'Deleted{deleted}old export jobs.')
+    logger.info(f'Deleted {deleted} old export jobs.')

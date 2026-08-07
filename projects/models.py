@@ -82,6 +82,7 @@ class ExportJob(models.Model):
     )
     type=models.CharField(max_length=20,choices=ExportType.choices,null=True,blank=True)
     status=models.CharField(max_length=20,choices=StatusChoices.choices,default=StatusChoices.Pending)
+    file_path=models.CharField(max_length=500,null=True,blank=True)
     file_url=models.URLField(null=True,blank=True)
     created_at=models.DateTimeField(auto_now_add=True)
     completed_at=models.DateTimeField(null=True,blank=True)

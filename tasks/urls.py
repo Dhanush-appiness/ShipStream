@@ -15,6 +15,7 @@ from .views import (
                     TaskLabelRetrieveUpdateDestroyView,
                     TaskListCreateView,
                     TaskReorderView,
+                    TaskRestoreView,
                     TaskRetrieveUpdateDestroyView,
 )
 
@@ -24,6 +25,7 @@ urlpatterns = [
     path('dashboard/',TaskDashboardView.as_view(),name='task-dashboard',),
     path('<int:pk>/',TaskRetrieveUpdateDestroyView.as_view(),name='task-detail',),
     path('<int:pk>/reorder/',TaskReorderView.as_view(),name='task-reorder',),
+    path('<int:pk>/restore/',TaskRestoreView.as_view(),name='task-restore',),
     #Comments
     path('<int:task_id>/comments/',CommentListCreateView.as_view(),name='comment-list-create',),
     path('comments/<int:pk>/',CommentRetrieveUpdateDestroyView.as_view(),name='comment-detail',),

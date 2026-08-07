@@ -4,7 +4,7 @@ import pytest
 
 from organizations.models import Membership, Organization
 from projects.models import Project
-from tasks.models import ActivityLog, Label, Notification, Task, TaskLabel
+from tasks.models import ActivityLog, Comment, Label, Notification, Task, TaskLabel
 from tasks.services import CommentService, TaskService
 
 
@@ -654,6 +654,37 @@ def test_task_dashboard(
 
 
 @pytest.mark.django_db
+def test_task_dashboard_cache_invalidates_on_status_change(
+    organization,
+    project,
+    user,
+    owner,
+):
+    from django.core.cache import cache
+
+    cache.clear()
+
+    task=Task.objects.create(
+        project=project,
+        created_by=owner,
+        assignee=user,
+        title='Cache Task',
+        status='TODO',
+        position=0,
+    )
+
+    dashboard_before=TaskService.get_dashboard(organization)
+    assert dashboard_before['status_counts']['TODO']==1
+    assert dashboard_before['status_counts']['DONE']==0
+
+    TaskService.update_task(task,{'status':'DONE'})
+
+    dashboard_after=TaskService.get_dashboard(organization)
+    assert dashboard_after['status_counts']['TODO']==0
+    assert dashboard_after['status_counts']['DONE']==1
+
+
+@pytest.mark.django_db
 def test_weekly_digest_email(
     organization,
     project,
@@ -670,6 +701,15 @@ def test_weekly_digest_email(
     from tasks.tasks import send_weekly_digest
 
     today=timezone.localdate()
+
+    Task.objects.create(
+        project=project,
+        created_by=owner,
+        assignee=owner,
+        title='Owner Overdue Task',
+        status='TODO',
+        due_date=today-timedelta(days=1),
+    )
 
     Task.objects.create(
         project=project,
@@ -701,14 +741,20 @@ def test_weekly_digest_email(
     with patch('tasks.tasks.send_mail') as mock_send_mail:
         send_weekly_digest.run(organization.id)
 
-    mock_send_mail.assert_called_once()
+    assert mock_send_mail.call_count==2
 
-    kwargs=mock_send_mail.call_args.kwargs
+    calls_by_recipient={
+        call.kwargs['recipient_list'][0]:call.kwargs
+        for call in mock_send_mail.call_args_list
+    }
 
-    assert owner.email in kwargs['recipient_list']
-    assert user.email in kwargs['recipient_list']
-    assert 'Open tasks: 2' in kwargs['message']
-    assert 'Overdue tasks: 1' in kwargs['message']
+    owner_kwargs=calls_by_recipient[owner.email]
+    assert 'Open tasks: 1' in owner_kwargs['message']
+    assert 'Overdue tasks: 1' in owner_kwargs['message']
+
+    user_kwargs=calls_by_recipient[user.email]
+    assert 'Open tasks: 2' in user_kwargs['message']
+    assert 'Overdue tasks: 1' in user_kwargs['message']
 
 
 @pytest.mark.django_db
@@ -729,14 +775,18 @@ def test_send_all_weekly_digests(
     )
 
 @pytest.mark.asyncio
-async def test_task_websocket_broadcast():
+@pytest.mark.django_db(transaction=True)
+async def test_task_websocket_broadcast(project,user,membership):
     from channels.testing import WebsocketCommunicator
+    from rest_framework_simplejwt.tokens import AccessToken
 
     from config.asgi import application
 
+    token=AccessToken.for_user(user)
+
     communicator=WebsocketCommunicator(
         application,
-        '/ws/tasks/',
+        f'/ws/projects/{project.id}/tasks/?token={token}',
     )
 
     connected,_=await communicator.connect()
@@ -748,7 +798,7 @@ async def test_task_websocket_broadcast():
     channel_layer=get_channel_layer()
 
     await channel_layer.group_send(
-        'tasks',
+        f'project_{project.id}',
         {
             'type':'task_updated',
             'action':'updated',
@@ -768,6 +818,43 @@ async def test_task_websocket_broadcast():
 
     await communicator.disconnect()
 
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_task_websocket_rejects_unauthenticated(project):
+    from channels.testing import WebsocketCommunicator
+
+    from config.asgi import application
+
+    communicator=WebsocketCommunicator(
+        application,
+        f'/ws/projects/{project.id}/tasks/',
+    )
+
+    connected,_=await communicator.connect()
+
+    assert connected is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_task_websocket_rejects_cross_organization_user(project,guest):
+    from channels.testing import WebsocketCommunicator
+    from rest_framework_simplejwt.tokens import AccessToken
+
+    from config.asgi import application
+
+    token=AccessToken.for_user(guest)
+
+    communicator=WebsocketCommunicator(
+        application,
+        f'/ws/projects/{project.id}/tasks/?token={token}',
+    )
+
+    connected,_=await communicator.connect()
+
+    assert connected is False
+
 @pytest.mark.django_db
 def test_task_queryset_avoids_n_plus_one(
     django_assert_num_queries,
@@ -776,15 +863,15 @@ def test_task_queryset_avoids_n_plus_one(
     user,
     owner,
 ):
-    for i in range(5):
-        Task.objects.create(
-            project=project,
-            created_by=owner,
-            assignee=user,
-            title=f'Query Test Task {i}',
-            status='TODO',
-            position=i,
-        )
+    from tasks.factories import TaskFactory
+
+    TaskFactory.create_batch(
+        5,
+        project=project,
+        created_by=owner,
+        assignee=user,
+        status='TODO',
+    )
 
     tasks=TaskService.get_tasks(organization)
 
@@ -1030,3 +1117,204 @@ def test_task_label_rejects_cross_organization_assignment(
     )
 
     assert task.project.organization!=foreign_label.organization
+
+
+@pytest.mark.django_db
+def test_admin_can_restore_soft_deleted_task(
+    api_client,
+    owner,
+    organization,
+    owner_membership,
+    project,
+):
+    task=Task.objects.create(
+        project=project,
+        created_by=owner,
+        title='Task To Restore',
+        status='TODO',
+        position=0,
+    )
+    task.delete()
+
+    api_client.force_authenticate(user=owner)
+    api_client.credentials(HTTP_X_ORG_ID=str(organization.id))
+
+    response=api_client.patch(
+        f'/api/v1/tasks/{task.id}/restore/',
+        format='json',
+    )
+
+    assert response.status_code==200
+    task.refresh_from_db()
+    assert task.is_deleted is False
+
+
+@pytest.mark.django_db
+def test_member_cannot_restore_soft_deleted_task(
+    api_client,
+    user,
+    organization,
+    membership,
+    project,
+    owner,
+):
+    task=Task.objects.create(
+        project=project,
+        created_by=owner,
+        title='Task To Restore',
+        status='TODO',
+        position=0,
+    )
+    task.delete()
+
+    api_client.force_authenticate(user=user)
+    api_client.credentials(HTTP_X_ORG_ID=str(organization.id))
+
+    response=api_client.patch(
+        f'/api/v1/tasks/{task.id}/restore/',
+        format='json',
+    )
+
+    assert response.status_code==403
+
+
+@pytest.mark.django_db
+def test_task_list_ordering_by_due_date(
+    authenticated_client,
+    project,
+    user,
+):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    today=timezone.localdate()
+
+    later_task=Task.objects.create(
+        project=project,
+        created_by=user,
+        title='Later Task',
+        status='TODO',
+        due_date=today+timedelta(days=10),
+    )
+    sooner_task=Task.objects.create(
+        project=project,
+        created_by=user,
+        title='Sooner Task',
+        status='TODO',
+        due_date=today+timedelta(days=1),
+    )
+
+    response=authenticated_client.get(
+        '/api/v1/tasks/?ordering=due_date'
+    )
+
+    assert response.status_code==200
+    ids=[task['id'] for task in response.data['results']]
+    assert ids.index(sooner_task.id)<ids.index(later_task.id)
+
+
+@pytest.mark.django_db
+def test_comment_queryset_avoids_n_plus_one(
+    django_assert_num_queries,
+    project,
+    user,
+    owner,
+):
+    task=Task.objects.create(
+        project=project,
+        created_by=owner,
+        title='Comment N+1 Task',
+        status='TODO',
+        position=0,
+    )
+
+    for i in range(5):
+        Comment.objects.create(
+            task=task,
+            author=user,
+            content=f'Comment {i}',
+        )
+
+    comments=CommentService.get_comments(task.id,project.organization)
+
+    with django_assert_num_queries(1):
+        for comment in comments:
+            _=comment.author.email
+            _=comment.task.title
+
+
+@pytest.mark.django_db
+def test_create_task_logs_and_reraises_on_failure(
+    organization,
+    project,
+    user,
+):
+    from tasks.serializers import TaskSerializer
+
+    serializer=TaskSerializer(data={
+        'project':project.id,
+        'title':'Task That Will Fail',
+        'status':'TODO',
+    })
+    assert serializer.is_valid()
+
+    with patch(
+        'tasks.services.ActivityLogService.log',
+        side_effect=RuntimeError('boom'),
+    ):
+        with pytest.raises(RuntimeError,match='boom'):
+            TaskService.create_task(serializer,user,organization)
+
+
+@pytest.mark.django_db
+def test_update_task_logs_and_reraises_on_failure(
+    project,
+    user,
+):
+    task=Task.objects.create(
+        project=project,
+        created_by=user,
+        title='Task To Update',
+        status='TODO',
+        position=0,
+    )
+
+    with patch(
+        'tasks.services.ActivityLogService.log',
+        side_effect=RuntimeError('boom'),
+    ):
+        with pytest.raises(RuntimeError,match='boom'):
+            TaskService.update_task(task,{'title':'New Title'})
+
+
+@pytest.mark.django_db
+@patch('tasks.tasks.send_mention_notification_email.delay')
+def test_create_comment_logs_and_reraises_on_failure(
+    mock_send_email,
+    organization,
+    project,
+    owner,
+):
+    from tasks.serializers import CommentSerializer
+
+    task=Task.objects.create(
+        project=project,
+        created_by=owner,
+        title='Comment Failure Task',
+        status='TODO',
+        position=0,
+    )
+
+    serializer=CommentSerializer(data={
+        'task':task.id,
+        'content':'A comment with no mentions.',
+    })
+    assert serializer.is_valid()
+
+    with patch(
+        'tasks.services.ActivityLogService.log',
+        side_effect=RuntimeError('boom'),
+    ):
+        with pytest.raises(RuntimeError,match='boom'):
+            CommentService.create_comment(serializer,owner,organization)

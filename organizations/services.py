@@ -28,7 +28,7 @@ def create_organization(user,validated_data):
         Membership.objects.create(
             user=user,
             organization=organization,
-            role="ADMIN",
+            role=Membership.RoleChoices.ADMIN,
         )
         logger.info(f'Organization created successfully:{name}')
         return organization
@@ -90,61 +90,88 @@ def delete_organization(organization):
 
 
 def create_invitation(user,organization,validated_data):
-    if Membership.objects.filter(
-        user__email=validated_data['email'],
-        organization=organization,
-    ).exists():
-        raise ValueError('User is already a member of the organization')
-    if Invitation.objects.filter(
-        email=validated_data['email'],
-        organization=organization,
-        status=Invitation.StatusChoices.PENDING,
-    ).exists():
-        raise ValueError('A pending invite already exists for this email')
-    token=secrets.token_urlsafe(32)
-    expires_at=timezone.now()+timedelta(hours=24)
-    invitation=Invitation.objects.create(
-        organization=organization,
-        invited_by=user,
-        email=validated_data['email'],
-        role=validated_data['role'],
-        token=token,
-        expires_at=expires_at,
+    """
+    Create a pending invitation for an email to join the organization, then
+    schedule the invitation email on Celery once the enclosing transaction
+    commits (so we never email someone about a row that got rolled back).
+    Rejects the email if it already belongs to a member, or already has a
+    pending invitation, to avoid duplicate invites.
+    """
+    logger.info(
+        f'Creating invitation for {validated_data["email"]} to organization: {organization.slug}'
     )
-    transaction.on_commit(
-    lambda:send_invitation_email.delay(invitation.id)
-    )
-    return invitation
+    try:
+        if Membership.objects.filter(
+            user__email=validated_data['email'],
+            organization=organization,
+        ).exists():
+            raise ValueError('User is already a member of the organization')
+        if Invitation.objects.filter(
+            email=validated_data['email'],
+            organization=organization,
+            status=Invitation.StatusChoices.PENDING,
+        ).exists():
+            raise ValueError('A pending invite already exists for this email')
+        token=secrets.token_urlsafe(32)
+        expires_at=timezone.now()+timedelta(hours=24)
+        invitation=Invitation.objects.create(
+            organization=organization,
+            invited_by=user,
+            email=validated_data['email'],
+            role=validated_data['role'],
+            token=token,
+            expires_at=expires_at,
+        )
+        transaction.on_commit(
+        lambda:send_invitation_email.delay(invitation.id)
+        )
+        logger.info(f'Invitation created for {validated_data["email"]}')
+        return invitation
+    except Exception as e:
+        logger.error(f'Failed to create invitation for {validated_data["email"]}: {str(e)}')
+        raise
 
 @transaction.atomic
 def accept_invitation(user,validated_data):
-    token=validated_data['token']
-    invitation=Invitation.objects.filter(
-        token=token
-    ).first()
-    if invitation is None:
-        raise ValueError('Invalid invitation token')
-    if invitation.status!=Invitation.StatusChoices.PENDING:
-        raise ValueError('Invitation no longer valid')
-    if invitation.expires_at<=timezone.now():
-        invitation.status=Invitation.StatusChoices.EXPIRED
+    """
+    Accept a pending invitation by token, creating (or reusing) the
+    corresponding Membership. Rejects tokens that are unknown, already
+    used, expired (marking the invitation EXPIRED as a side effect), or
+    addressed to a different email than the accepting user's.
+    """
+    try:
+        token=validated_data['token']
+        invitation=Invitation.objects.filter(
+            token=token
+        ).first()
+        if invitation is None:
+            raise ValueError('Invalid invitation token')
+        if invitation.status!=Invitation.StatusChoices.PENDING:
+            raise ValueError('Invitation no longer valid')
+        if invitation.expires_at<=timezone.now():
+            invitation.status=Invitation.StatusChoices.EXPIRED
+            invitation.save(update_fields=['status'])
+            raise ValueError('Invitation has expired')
+        if invitation.email.lower()!=user.email.lower():
+            raise ValueError('This invitation belongs to another user')
+        membership,created=Membership.objects.get_or_create(
+            user=user,
+            organization=invitation.organization,
+            defaults={
+                'role':invitation.role,
+            },
+        )
+        invitation.status=Invitation.StatusChoices.ACCEPTED
         invitation.save(update_fields=['status'])
-        raise ValueError('Invitation has expired')
-    if invitation.email.lower()!=user.email.lower():
-        raise ValueError('This invitation belongs to another user')
-    membership,created=Membership.objects.get_or_create(
-        user=user,
-        organization=invitation.organization,
-        defaults={
-            'role':invitation.role,
-        },
-    )
-    invitation.status=Invitation.StatusChoices.ACCEPTED
-    invitation.save(update_fields=['status'])
-    return membership
+        logger.info(f'Invitation accepted by {user.email}')
+        return membership
+    except Exception as e:
+        logger.error(f'Failed to accept invitation: {str(e)}')
+        raise
 
 
 def user_can_manage_organization(user,organization):
+    """Return True if the user is an OWNER or ADMIN of the organization."""
     return Membership.objects.filter(
         user=user,
         organization=organization,

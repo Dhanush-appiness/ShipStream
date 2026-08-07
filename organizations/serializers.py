@@ -4,6 +4,7 @@ from .models import Invitation
 
 
 class OrganizationSerializer(serializers.Serializer):
+    id=serializers.IntegerField(read_only=True)
     name=serializers.CharField(max_length=255)
     slug=serializers.CharField(read_only=True)
 

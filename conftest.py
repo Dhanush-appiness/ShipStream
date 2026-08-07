@@ -1,9 +1,10 @@
 import pytest
 from rest_framework.test import APIClient
 
-from accounts.models import User
-from organizations.models import Membership, Organization
-from projects.models import Project
+from accounts.factories import UserFactory
+from organizations.factories import MembershipFactory, OrganizationFactory
+from organizations.models import Membership
+from projects.factories import ProjectFactory
 
 
 @pytest.fixture
@@ -13,31 +14,22 @@ def api_client():
 
 @pytest.fixture
 def user(db):
-    return User.objects.create_user(
-        email='member@example.com',
-        password='testpass123'
-    )
+    return UserFactory(email='member@example.com')
 
 
 @pytest.fixture
 def owner(db):
-    return User.objects.create_user(
-        email='owner@example.com',
-        password='testpass123'
-    )
+    return UserFactory(email='owner@example.com')
 
 
 @pytest.fixture
 def guest(db):
-    return User.objects.create_user(
-        email='guest@example.com',
-        password='testpass123'
-    )
+    return UserFactory(email='guest@example.com')
 
 
 @pytest.fixture
 def organization(db):
-    return Organization.objects.create(
+    return OrganizationFactory(
         name='Test Organization',
         slug='test-organization'
     )
@@ -45,7 +37,7 @@ def organization(db):
 
 @pytest.fixture
 def membership(user,organization):
-    return Membership.objects.create(
+    return MembershipFactory(
         user=user,
         organization=organization,
         role=Membership.RoleChoices.MEMBER
@@ -54,7 +46,7 @@ def membership(user,organization):
 
 @pytest.fixture
 def owner_membership(owner,organization):
-    return Membership.objects.create(
+    return MembershipFactory(
         user=owner,
         organization=organization,
         role=Membership.RoleChoices.OWNER
@@ -63,7 +55,7 @@ def owner_membership(owner,organization):
 
 @pytest.fixture
 def guest_membership(guest,organization):
-    return Membership.objects.create(
+    return MembershipFactory(
         user=guest,
         organization=organization,
         role=Membership.RoleChoices.GUEST
@@ -80,7 +72,7 @@ def authenticated_client(api_client,user,membership,organization):
 
 @pytest.fixture
 def project(organization):
-    return Project.objects.create(
+    return ProjectFactory(
         organization=organization,
         name='Test Project',
         description='Test project description',

@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from accounts.models import User
 
-from .models import Invitation, Membership
+from .models import Invitation, Membership, Organization
 from .services import accept_invitation, create_invitation
 
 
@@ -325,3 +325,154 @@ def test_invitation_email_retries_on_failure(
         exc=error,
         countdown=60,
     )
+
+
+@pytest.mark.django_db
+def test_create_organization_endpoint(api_client,user):
+    api_client.force_authenticate(user=user)
+
+    response=api_client.post(
+        reverse('create-organization',kwargs={'version':'v1'}),
+        {'name':'Brand New Org'},
+        format='json',
+    )
+
+    assert response.status_code==201
+    assert response.data['slug']=='brand-new-org'
+    assert response.data['id']==Organization.objects.get(slug='brand-new-org').id
+    assert Membership.objects.filter(
+        user=user,
+        organization__slug='brand-new-org',
+        role='ADMIN',
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_create_organization_endpoint_rejects_missing_name(api_client,user):
+    api_client.force_authenticate(user=user)
+
+    response=api_client.post(
+        reverse('create-organization',kwargs={'version':'v1'}),
+        {},
+        format='json',
+    )
+
+    assert response.status_code==400
+
+
+@pytest.mark.django_db
+def test_list_organizations_only_returns_users_own_orgs(
+    api_client,
+    user,
+    organization,
+    membership,
+):
+    from organizations.models import Organization
+
+    other_org=Organization.objects.create(name='Other Org',slug='other-org')
+
+    api_client.force_authenticate(user=user)
+
+    response=api_client.get(
+        reverse('list-organizations',kwargs={'version':'v1'}),
+    )
+
+    assert response.status_code==200
+    slugs=[org['slug'] for org in response.data['results']]
+    assert organization.slug in slugs
+    assert other_org.slug not in slugs
+
+
+@pytest.mark.django_db
+def test_retrieve_organization_endpoint(api_client,user,organization,membership):
+    api_client.force_authenticate(user=user)
+
+    response=api_client.get(
+        reverse('retrieve-organization',kwargs={'version':'v1','slug':organization.slug}),
+    )
+
+    assert response.status_code==200
+    assert response.data['slug']==organization.slug
+
+
+@pytest.mark.django_db
+def test_retrieve_organization_404_for_non_member(api_client,user,organization):
+    api_client.force_authenticate(user=user)
+
+    response=api_client.get(
+        reverse('retrieve-organization',kwargs={'version':'v1','slug':organization.slug}),
+    )
+
+    assert response.status_code==404
+
+
+@pytest.mark.django_db
+def test_owner_can_update_organization(api_client,owner,organization,owner_membership):
+    api_client.force_authenticate(user=owner)
+
+    response=api_client.put(
+        reverse('retrieve-organization',kwargs={'version':'v1','slug':organization.slug}),
+        {'name':'Renamed Org'},
+        format='json',
+    )
+
+    assert response.status_code==200
+    organization.refresh_from_db()
+    assert organization.name=='Renamed Org'
+
+
+@pytest.mark.django_db
+def test_member_cannot_update_organization(api_client,user,organization,membership):
+    api_client.force_authenticate(user=user)
+
+    response=api_client.put(
+        reverse('retrieve-organization',kwargs={'version':'v1','slug':organization.slug}),
+        {'name':'Renamed Org'},
+        format='json',
+    )
+
+    assert response.status_code==403
+
+
+@pytest.mark.django_db
+def test_owner_can_delete_organization(api_client,owner,organization,owner_membership):
+    api_client.force_authenticate(user=owner)
+
+    response=api_client.delete(
+        reverse('retrieve-organization',kwargs={'version':'v1','slug':organization.slug}),
+    )
+
+    assert response.status_code==200
+
+
+@pytest.mark.django_db
+def test_member_cannot_delete_organization(api_client,user,organization,membership):
+    api_client.force_authenticate(user=user)
+
+    response=api_client.delete(
+        reverse('retrieve-organization',kwargs={'version':'v1','slug':organization.slug}),
+    )
+
+    assert response.status_code==403
+
+
+@pytest.mark.django_db
+def test_current_tenant_returns_active_organization(authenticated_client,organization):
+    response=authenticated_client.get(
+        reverse('current-tenant',kwargs={'version':'v1'}),
+    )
+
+    assert response.status_code==200
+    assert response.data['organization_id']==organization.id
+
+
+@pytest.mark.django_db
+def test_current_tenant_returns_none_without_org_header(api_client,user):
+    api_client.force_authenticate(user=user)
+
+    response=api_client.get(
+        reverse('current-tenant',kwargs={'version':'v1'}),
+    )
+
+    assert response.status_code==200
+    assert response.data['organization'] is None

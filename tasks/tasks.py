@@ -26,6 +26,11 @@ def send_mention_notification_email(self,notification_id):
         ).get(id=notification_id)
         if notification.type!='MENTION':
             return
+        if notification.email_sent_at is not None:
+            logger.info(
+                f'Mention notification {notification_id} already emailed, skipping.'
+            )
+            return
         send_mail(
         subject='You were mentioned in ShipStream',
         message=(
@@ -36,6 +41,8 @@ def send_mention_notification_email(self,notification_id):
         recipient_list=[notification.user.email],
         fail_silently=False,
         )
+        notification.email_sent_at=timezone.now()
+        notification.save(update_fields=['email_sent_at'])
         logger.info(
         f'Mention notification email sent to {notification.user.email}'
         )
@@ -60,42 +67,48 @@ def send_weekly_digest(self,organization_id):
             is_active=True,
         )
 
-        open_tasks=Task.objects.for_organization(
-            organization
-        ).exclude(
-            status='DONE'
-        )
+        today=timezone.localdate()
+        memberships=Membership.objects.filter(
+            organization=organization,
+        ).select_related('user')
 
-        overdue_tasks=open_tasks.filter(
-            due_date__lt=timezone.localdate()
-        )
+        sent_count=0
 
-        recipients=list(
-            Membership.objects.filter(
-                organization=organization,
-            ).values_list(
-                'user__email',
-                flat=True,
+        for membership in memberships:
+            member=membership.user
+
+            open_tasks=Task.objects.for_organization(
+                organization
+            ).filter(
+                assignee=member,
+            ).exclude(
+                status='DONE'
             )
-        )
 
-        if not recipients:
-            return
+            open_count=open_tasks.count()
 
-        send_mail(
-            subject=f'Weekly ShipStream digest — {organization.name}',
-            message=(
-                f'Weekly summary for {organization.name}\n\n'
-                f'Open tasks: {open_tasks.count()}\n'
-                f'Overdue tasks: {overdue_tasks.count()}'
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=recipients,
-            fail_silently=False,
-        )
+            if open_count==0:
+                continue
+
+            overdue_count=open_tasks.filter(
+                due_date__lt=today
+            ).count()
+
+            send_mail(
+                subject=f'Weekly ShipStream digest — {organization.name}',
+                message=(
+                    f'Weekly summary for {organization.name}\n\n'
+                    f'Open tasks: {open_count}\n'
+                    f'Overdue tasks: {overdue_count}'
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[member.email],
+                fail_silently=False,
+            )
+            sent_count+=1
 
         logger.info(
-            f'Weekly digest sent for organization {organization.id}'
+            f'Weekly digest sent to {sent_count} member(s) of organization {organization.id}'
         )
 
     except Organization.DoesNotExist:

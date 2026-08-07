@@ -22,3 +22,24 @@ ignore=[
 quote-style='single'
 indent-style='space'
 line-ending='auto'
+
+[tool.coverage.run]
+source=['.']
+omit=[
+    '*/migrations/*',
+    'venv/*',
+    '.venv/*',
+    'manage.py',
+    'config/wsgi.py',
+    'config/asgi.py',
+    'config/settings/dev.py',
+    'config/settings/prod.py',
+    '*/tests.py',
+    'conftest.py',
+]
+
+[tool.coverage.report]
+exclude_lines=[
+    'pragma: no cover',
+    'raise NotImplementedError',
+]

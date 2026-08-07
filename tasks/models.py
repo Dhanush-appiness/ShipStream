@@ -1,5 +1,7 @@
 from django.conf import settings
-from django.db import models
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVector, SearchVectorField
+from django.db import connection, models
 
 from common.managers import AllObjectsManager, TaskManager
 from organizations.models import Organization
@@ -47,6 +49,20 @@ class Task(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     updated_at=models.DateTimeField(auto_now=True)
     due_date=models.DateField(null=True,blank=True)
+    search_vector=SearchVectorField(null=True,blank=True)
+
+    def save(self,*args,**kwargs):
+        super().save(*args,**kwargs)
+        if connection.vendor=='postgresql':
+            type(self).all_objects.filter(pk=self.pk).update(
+                search_vector=SearchVector(
+                    'title',
+                    weight='A',
+                ) + SearchVector(
+                    'description',
+                    weight='B',
+                ),
+            )
 
     def delete(self,*args,**kwargs):
         self.is_deleted=True
@@ -54,6 +70,13 @@ class Task(models.Model):
 
     def __str__(self):
         return self.title
+
+    class Meta:
+        indexes=[
+            models.Index(fields=['project','status','position'],name='task_project_status_pos_idx'),
+            models.Index(fields=['due_date'],name='task_due_date_idx'),
+            GinIndex(fields=['search_vector'],name='task_search_vector_gin'),
+        ]
 
 
 class Comment(models.Model):
@@ -147,6 +170,7 @@ class Notification(models.Model):
     title=models.CharField(max_length=255)
     body=models.TextField()
     read_at=models.DateTimeField(blank=True,null=True)
+    email_sent_at=models.DateTimeField(blank=True,null=True)
     created_at=models.DateTimeField(auto_now_add=True)
     def __str__(self):
         return self.title

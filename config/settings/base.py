@@ -21,6 +21,7 @@ INSTALLED_APPS=[
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.postgres',
 
     #thirdparty apps
     'rest_framework',
@@ -134,6 +135,7 @@ REST_FRAMEWORK={
     'DEFAULT_THROTTLE_RATES':{
         'user':'100/hour',
         'anon':'20/hour',
+        'auth':'5/minute',
     },
 
     'DEFAULT_VERSIONING_CLASS':'rest_framework.versioning.URLPathVersioning',

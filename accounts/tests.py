@@ -2,12 +2,69 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import PasswordReset
 from accounts.services import confirm_password_reset, request_password_reset
+
+
+@pytest.fixture(autouse=True)
+def clear_throttle_cache():
+    cache.clear()
+    yield
+
+
+@pytest.mark.django_db
+def test_register_endpoint_returns_user_id(api_client):
+    from accounts.models import User
+
+    response=api_client.post(
+        reverse('register',kwargs={'version':'v1'}),
+        {'email':'newperson@example.com','password':'SecurePass123!'},
+        format='json',
+    )
+
+    assert response.status_code==201
+    assert response.data['id']==User.objects.get(email='newperson@example.com').id
+
+
+@pytest.mark.django_db
+def test_login_endpoint_returns_user_id(api_client,user):
+    response=api_client.post(
+        reverse('login',kwargs={'version':'v1'}),
+        {'email':user.email,'password':'testpass123'},
+        format='json',
+    )
+
+    assert response.status_code==200
+    assert response.data['id']==user.id
+
+
+@pytest.mark.django_db
+def test_login_throttled_after_repeated_attempts(api_client):
+    from django.core.cache import cache
+
+    cache.clear()
+
+    url=reverse('login',kwargs={'version':'v1'})
+
+    for _ in range(5):
+        api_client.post(
+            url,
+            {'email':'nobody@example.com','password':'wrong'},
+            format='json',
+        )
+
+    response=api_client.post(
+        url,
+        {'email':'nobody@example.com','password':'wrong'},
+        format='json',
+    )
+
+    assert response.status_code==429
 
 
 @pytest.mark.django_db

@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import User
+from common.throttling import AuthRateThrottle
 
 from .serializers import (
     LoginSerializer,
@@ -35,6 +36,7 @@ class RegisterView(APIView):
     """
 
     permission_classes=[AllowAny]
+    throttle_classes=[AuthRateThrottle]
     def post(self,request,*args,**kwargs):
         """
         Register a new user.
@@ -45,6 +47,7 @@ class RegisterView(APIView):
             user=register_user(serializer.validated_data)
             return Response(
                 {'message':'User created successfully',
+                'id':user.id,
                 'email':user.email},
                 status=status.HTTP_201_CREATED
             )
@@ -61,6 +64,7 @@ class LoginView(APIView):
     """
 
     permission_classes=[AllowAny]
+    throttle_classes=[AuthRateThrottle]
     def post(self,request,*args,**kwargs):
         """
         Authenticate the user and return JWT tokens.
@@ -72,6 +76,7 @@ class LoginView(APIView):
             return Response(
                 {
                     'message':'Login successful',
+                    'id':login_data['user'].id,
                     'email':login_data['user'].email,
                     'access':login_data['access'],
                     'refresh':login_data['refresh'],
@@ -107,6 +112,7 @@ class LogoutView(APIView):
 
 class PasswordResetRequestView(APIView):
     permission_classes=[AllowAny]
+    throttle_classes=[AuthRateThrottle]
 
     def post(self,request,*args,**kwargs):
         serializer=PasswordResetRequestSerializer(data=request.data)
@@ -125,6 +131,7 @@ class PasswordResetRequestView(APIView):
 
 class PasswordResetConfirmView(APIView):
     permission_classes=[AllowAny]
+    throttle_classes=[AuthRateThrottle]
 
     def post(self,request,*args,**kwargs):
         serializer=PasswordResetConfirmSerializer(data=request.data)

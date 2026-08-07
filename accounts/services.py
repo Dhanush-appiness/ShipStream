@@ -77,31 +77,58 @@ def logout_user(validated_data):
 
 
 def request_password_reset(email):
-    user=User.objects.get(email=email)
-    token=secrets.token_urlsafe(32)
-    expires_at=timezone.now()+timedelta(hours=1)
-    password_reset=PasswordReset.objects.create(
-        user=user,
-        token=token,
-        expires_at=expires_at,
+    """
+    Create a password reset token for the given email and schedule the
+    reset email on Celery once the transaction commits. Deliberately lets
+    User.DoesNotExist propagate to the caller rather than swallowing it -
+    the view catches it and returns the same generic response either way,
+    so this function doesn't need to know about that concealment itself.
+    """
+    logger.info(f'Password reset requested for: {email}')
+    try:
+        user=User.objects.get(email=email)
+        token=secrets.token_urlsafe(32)
+        expires_at=timezone.now()+timedelta(hours=1)
+        password_reset=PasswordReset.objects.create(
+            user=user,
+            token=token,
+            expires_at=expires_at,
+        )
+        transaction.on_commit(
+        lambda:send_password_reset_email.delay(password_reset.id)
     )
-    transaction.on_commit(
-    lambda:send_password_reset_email.delay(password_reset.id)
-)
-    return password_reset
+        logger.info(f'Password reset token created for: {email}')
+        return password_reset
+    except User.DoesNotExist:
+        logger.info(f'Password reset requested for unknown email: {email}')
+        raise
+    except Exception as e:
+        logger.error(f'Password reset request failed for {email}: {str(e)}')
+        raise
 
 @transaction.atomic
 def confirm_password_reset(token,new_password):
-    password_reset=PasswordReset.objects.filter(token=token).first()
-    if password_reset is None:
-        raise ValueError('Invalid password reset token')
-    if password_reset.used_at is not None:
-        raise ValueError('Password reset token has already been used')
-    if password_reset.expires_at<=timezone.now():
-        raise ValueError('Password reset token has expired')
-    user=password_reset.user
-    user.set_password(new_password)
-    user.save(update_fields=['password'])
-    password_reset.used_at=timezone.now()
-    password_reset.save(update_fields=['used_at'])
-    return user
+    """
+    Set a new password given a valid, unused, unexpired reset token, then
+    mark the token used_at so it can't be replayed. Wrapped in a single
+    transaction so a failure between setting the password and marking the
+    token used can't leave the token replayable.
+    """
+    try:
+        password_reset=PasswordReset.objects.filter(token=token).first()
+        if password_reset is None:
+            raise ValueError('Invalid password reset token')
+        if password_reset.used_at is not None:
+            raise ValueError('Password reset token has already been used')
+        if password_reset.expires_at<=timezone.now():
+            raise ValueError('Password reset token has expired')
+        user=password_reset.user
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+        password_reset.used_at=timezone.now()
+        password_reset.save(update_fields=['used_at'])
+        logger.info(f'Password reset completed for: {user.email}')
+        return user
+    except Exception as e:
+        logger.error(f'Password reset confirmation failed: {str(e)}')
+        raise
