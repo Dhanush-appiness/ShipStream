@@ -41,7 +41,6 @@ def login_user(validated_data):
     try:
         email=validated_data['email']
         password=validated_data['password']
-        logger.info(f'User attempted to login: {email}')
         user=authenticate(username=email, password=password)
         if user is None:
             logger.warning(f'Invalid login attempt: {email}')
@@ -66,7 +65,6 @@ def logout_user(validated_data):
     """
 
     refresh=validated_data['refresh']
-    logger.info('Logout attempt')
     try:
         token=RefreshToken(refresh)
         token.blacklist()
@@ -84,7 +82,7 @@ def request_password_reset(email):
     the view catches it and returns the same generic response either way,
     so this function doesn't need to know about that concealment itself.
     """
-    logger.info(f'Password reset requested for: {email}')
+
     try:
         user=User.objects.get(email=email)
         token=secrets.token_urlsafe(32)
@@ -97,7 +95,6 @@ def request_password_reset(email):
         transaction.on_commit(
         lambda:send_password_reset_email.delay(password_reset.id)
     )
-        logger.info(f'Password reset token created for: {email}')
         return password_reset
     except User.DoesNotExist:
         logger.info(f'Password reset requested for unknown email: {email}')

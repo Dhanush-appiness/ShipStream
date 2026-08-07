@@ -1,10 +1,5 @@
 """
-Service layer for the projects app.
-
-Business logic for projects, project membership, and CSV export jobs lives
-here rather than in views or serializers - see docs/adr/0002-service-layer.md.
-Write paths with more than one meaningful failure mode are wrapped in
-try/except so failures are logged with context before being re-raised.
+Service layer for project management, project membership, and export jobs.
 """
 
 import logging
@@ -16,12 +11,12 @@ from organizations.models import Membership
 from .models import ExportJob, Project, ProjectMember
 from .tasks import generate_export
 
-logger=logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Project.status values. Mirrors the choices on the Project model, kept as
 # named constants so service-layer code never compares against a bare string.
-PROJECT_STATUS_ACTIVE='ACTIVE'
-PROJECT_STATUS_ARCHIVED='ARCHIVED'
+PROJECT_STATUS_ACTIVE = 'ACTIVE'
+PROJECT_STATUS_ARCHIVED = 'ARCHIVED'
 
 
 class ProjectService:
@@ -30,12 +25,10 @@ class ProjectService:
     @staticmethod
     def get_projects(organization):
         """Return every non-deleted project belonging to the organization."""
-        return Project.objects.for_organization(
-            organization
-        )
+        return Project.objects.for_organization(organization)
 
     @staticmethod
-    def get_project(organization,project_id):
+    def get_project(organization, project_id):
         """Return a single project scoped to the organization, or 404."""
         return get_object_or_404(
             Project.objects.for_organization(organization),
@@ -46,142 +39,107 @@ class ProjectService:
     def create_project(organization, validated_data):
         """Create a new project under the given organization."""
         try:
-            return Project.objects.create(
-                organization=organization,
-                **validated_data
-            )
+            return Project.objects.create(organization=organization, **validated_data)
         except Exception as exc:
-            logger.error('Failed to create project for organization %s: %s',organization.id,exc)
+            logger.error('Failed to create project for organization %s: %s', organization.id, exc)
             raise
 
     @staticmethod
-    def update_project(organization,project_id,validated_data):
+    def update_project(organization, project_id, validated_data):
         """Apply field changes to an existing project and save."""
         try:
-            project=ProjectService.get_project(
-                organization,
-                project_id
-            )
+            project = ProjectService.get_project(organization, project_id)
             for field, value in validated_data.items():
-                setattr(project,field,value)
+                setattr(project, field, value)
             project.save()
             return project
         except Exception as exc:
-            logger.error('Failed to update project %s: %s',project_id,exc)
+            logger.error('Failed to update project %s: %s', project_id, exc)
             raise
 
     @staticmethod
-    def delete_project(organization,project_id):
+    def delete_project(organization, project_id):
         """Soft-delete a project (see Project.delete())."""
         try:
-            project=ProjectService.get_project(
-                organization,
-                project_id
-            )
+            project = ProjectService.get_project(organization, project_id)
             project.delete()
             return project
         except Exception as exc:
-            logger.error('Failed to delete project %s: %s',project_id,exc)
+            logger.error('Failed to delete project %s: %s', project_id, exc)
             raise
 
     @staticmethod
-    def archive_project(organization,project_id):
+    def archive_project(organization, project_id):
         """Mark a project ARCHIVED without soft-deleting it."""
         try:
-            project=ProjectService.get_project(
-                organization,
-                project_id
-            )
-            project.status=PROJECT_STATUS_ARCHIVED
+            project = ProjectService.get_project(organization, project_id)
+            project.status = PROJECT_STATUS_ARCHIVED
             project.save(update_fields=['status'])
             return project
         except Exception as exc:
-            logger.error('Failed to archive project %s: %s',project_id,exc)
+            logger.error('Failed to archive project %s: %s', project_id, exc)
             raise
 
     @staticmethod
-    def restore_project(organization,project_id):
-        """
-        Bring a soft-deleted project back (admin-only at the view layer -
-        see ProjectRestoreView). 404s if no matching soft-deleted project
-        exists for this organization, which also prevents restoring a
-        project that was never deleted in the first place.
-        """
+    def restore_project(organization, project_id):
+        """Restore a soft-deleted project."""
+
         try:
-            project=get_object_or_404(
+            project = get_object_or_404(
                 Project.all_objects.filter(organization=organization),
                 id=project_id,
                 is_deleted=True,
             )
-            project.is_deleted=False
+            project.is_deleted = False
             project.save(update_fields=['is_deleted'])
             return project
         except Exception as exc:
-            logger.error('Failed to restore project %s: %s',project_id,exc)
+            logger.error(
+                'Failed to restore project %s: %s',
+                project_id,
+                exc,
+            )
             raise
 
 
 class ProjectMemberService:
-    """
-    Business logic for ProjectMember - which organization members are
-    assigned to a given project.
-    """
+    """Business logic for project members."""
 
     @staticmethod
-    def get_members(organization,project_id):
+    def get_members(organization, project_id):
         """Return every member assigned to a project, with user/project pre-fetched."""
-        project=ProjectService.get_project(
-            organization,
-            project_id
-        )
-        return ProjectMember.objects.filter(
-            project=project
-        ).select_related(
-            'user',
-            'project'
-        )
+        project = ProjectService.get_project(organization, project_id)
+        return ProjectMember.objects.filter(project=project).select_related('user', 'project')
 
     @staticmethod
-    def add_member(organization,project_id,user):
-        """
-        Assign a user to a project, after confirming they're actually a
-        member of the project's organization - a project member must be a
-        subset of the organization's members, never an outsider.
-        Idempotent: adding the same user twice is a no-op, not an error.
-        """
-        try:
-            project=ProjectService.get_project(
-                organization,
-                project_id
-            )
+    def add_member(organization, project_id, user):
+        """Assign an organization member to a project."""
 
-            membership=Membership.objects.filter(
+        try:
+            project = ProjectService.get_project(organization, project_id)
+
+            membership = Membership.objects.filter(
                 user=user,
                 organization=organization,
             ).exists()
 
             if not membership:
-                raise ValueError(
-                    'User must belong to the organization.'
-                )
+                raise ValueError('User must belong to the organization.')
 
-            project_member,created=ProjectMember.objects.get_or_create(
+            project_member, created = ProjectMember.objects.get_or_create(
                 project=project,
                 user=user,
             )
 
             return project_member
         except Exception as exc:
-            logger.error('Failed to add member to project %s: %s',project_id,exc)
+            logger.error('Failed to add member to project %s: %s', project_id, exc)
             raise
 
     @staticmethod
-    def get_member(organization,project_id,user_id):
+    def get_member(organization, project_id, user_id):
         """Return a single project-membership row scoped to the organization, or 404."""
-        project=ProjectService.get_project(
-            organization,
-            project_id
-        )
+        project = ProjectService.get_project(organization, project_id)
         return get_object_or_404(
             ProjectMember,
             project=project,
@@ -200,15 +158,13 @@ class ExportJobService:
     @staticmethod
     def get_jobs(organization):
         """Return every export job in the organization, with project/user pre-fetched."""
-        return ExportJob.objects.filter(
-            project__organization=organization
-        ).select_related(
+        return ExportJob.objects.filter(project__organization=organization).select_related(
             'project',
             'user',
         )
 
     @staticmethod
-    def get_job(organization,job_id):
+    def get_job(organization, job_id):
         """Return a single export job scoped to the organization, or 404."""
         return get_object_or_404(
             ExportJob,
@@ -217,20 +173,14 @@ class ExportJobService:
         )
 
     @staticmethod
-    def create_job(user,organization,validated_data):
-        """
-        Create an ExportJob record and hand it off to Celery
-        (generate_export) to actually build the CSV. Returns immediately
-        with the Pending job - the caller (ExportJobListCreateView) responds
-        202 Accepted rather than waiting for the file to be generated.
-        """
+    def create_job(user, organization, validated_data):
+        """Create an export job and queue CSV generation."""
+
         try:
-            project=validated_data['project']
-            if project.organization!=organization:
-                raise ValueError(
-                    "Cannot export another organization's project."
-                )
-            job=ExportJob.objects.create(
+            project = validated_data['project']
+            if project.organization != organization:
+                raise ValueError("Cannot export another organization's project.")
+            job = ExportJob.objects.create(
                 user=user,
                 status=ExportJob.StatusChoices.Pending,
                 **validated_data,
@@ -238,5 +188,7 @@ class ExportJobService:
             generate_export.delay(job.id)
             return job
         except Exception as exc:
-            logger.error('Failed to create export job for organization %s: %s',organization.id,exc)
+            logger.error(
+                'Failed to create export job for organization %s: %s', organization.id, exc
+            )
             raise

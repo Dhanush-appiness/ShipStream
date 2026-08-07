@@ -19,7 +19,6 @@ def create_organization(user,validated_data):
     """
 
     name=validated_data["name"]
-    logger.info(f'Creating organization:{name}')
     try:
         organization=Organization.objects.create(
             name=name,
@@ -64,7 +63,6 @@ def update_organization(organization,validated_data):
     Update organization
     """
 
-    logger.info(f'Updating organization: {organization.slug}')
     try:
         organization.name=validated_data['name']
         organization.slug=slugify(validated_data['name'])
@@ -80,7 +78,6 @@ def delete_organization(organization):
     Delete organization
     """
 
-    logger.info(f'Deleting organization: {organization.slug}')
     try:
         organization.delete()
         logger.info(f'Successfully deleted organization: {organization.slug}')
