@@ -2,7 +2,9 @@ from unittest.mock import patch
 
 import pytest
 
-from tasks.models import Task
+from organizations.models import Membership, Organization
+from projects.models import Project
+from tasks.models import ActivityLog, Label, Notification, Task, TaskLabel
 from tasks.services import CommentService, TaskService
 
 
@@ -238,6 +240,7 @@ def test_comment_mention_creates_notification(
     CommentService.create_comment(
         serializer,
         owner,
+        organization,
     )
 
     notification=Notification.objects.get(
@@ -289,6 +292,7 @@ def test_comment_mention_ignores_user_outside_organization(
     CommentService.create_comment(
         serializer,
         owner,
+        organization,
     )
 
     assert not Notification.objects.filter(
@@ -329,6 +333,7 @@ def test_comment_self_mention_does_not_create_notification(
     CommentService.create_comment(
         serializer,
         owner,
+        project.organization,
     )
 
     assert not Notification.objects.filter(
@@ -455,7 +460,7 @@ def test_task_filter_by_label(
     project,
     user,
 ):
-    from tasks.models import Label, TaskLabel
+    from tasks.models import Label
 
     task_with_label=Task.objects.create(
         project=project,
@@ -788,3 +793,240 @@ def test_task_queryset_avoids_n_plus_one(
             _=task.project.name
             _=task.assignee.email
             _=task.created_by.email
+
+
+@pytest.mark.django_db
+def test_task_list_respects_active_organization(
+    api_client,
+    user,
+    organization,
+    membership,
+):
+    second_organization=Organization.objects.create(
+        name='Second Organization',
+        slug='second-organization',
+    )
+    Membership.objects.create(
+        user=user,
+        organization=second_organization,
+        role=Membership.RoleChoices.MEMBER,
+    )
+    first_project=Project.objects.create(
+        organization=organization,
+        name='First Project',
+    )
+    second_project=Project.objects.create(
+        organization=second_organization,
+        name='Second Project',
+    )
+    Task.objects.create(
+        project=first_project,
+        created_by=user,
+        title='First Organization Task',
+        status='TODO',
+        position=0,
+    )
+    Task.objects.create(
+        project=second_project,
+        created_by=user,
+        title='Second Organization Task',
+        status='TODO',
+        position=0,
+    )
+    api_client.force_authenticate(user=user)
+    api_client.credentials(
+        HTTP_X_ORG_ID=str(second_organization.id)
+    )
+    response=api_client.get('/api/v1/tasks/')
+    assert response.status_code==200
+    titles=[task['title'] for task in response.data['results']]
+    assert 'Second Organization Task' in titles
+    assert 'First Organization Task' not in titles
+
+
+@pytest.mark.django_db
+def test_cross_organization_label_not_visible(
+    api_client,
+    user,
+    organization,
+    membership,
+):
+    second_organization=Organization.objects.create(
+        name='Second Organization',
+        slug='second-organization',
+    )
+    Membership.objects.create(
+        user=user,
+        organization=second_organization,
+        role=Membership.RoleChoices.MEMBER,
+    )
+    Label.objects.create(
+        organization=organization,
+        name='First Org Label',
+    )
+    Label.objects.create(
+        organization=second_organization,
+        name='Second Org Label',
+    )
+    api_client.force_authenticate(user=user)
+    api_client.credentials(
+        HTTP_X_ORG_ID=str(second_organization.id)
+    )
+    response=api_client.get('/api/v1/tasks/labels/')
+    assert response.status_code==200
+    names=[label['name'] for label in response.data['results']]
+    assert 'Second Org Label' in names
+    assert 'First Org Label' not in names
+
+
+@pytest.mark.django_db
+def test_cross_organization_activity_not_visible(
+    api_client,
+    user,
+    organization,
+    membership,
+):
+    second_organization=Organization.objects.create(
+        name='Second Organization',
+        slug='second-organization',
+    )
+    Membership.objects.create(
+        user=user,
+        organization=second_organization,
+        role=Membership.RoleChoices.MEMBER,
+    )
+    first_project=Project.objects.create(
+        organization=organization,
+        name='First Project',
+    )
+    second_project=Project.objects.create(
+        organization=second_organization,
+        name='Second Project',
+    )
+    first_task=Task.objects.create(
+        project=first_project,
+        created_by=user,
+        title='First Task',
+        position=0,
+    )
+    second_task=Task.objects.create(
+        project=second_project,
+        created_by=user,
+        title='Second Task',
+        position=0,
+    )
+    ActivityLog.objects.create(
+        organization=organization,
+        task=first_task,
+        actor=user,
+        action='FIRST_ORG_ACTION',
+    )
+    ActivityLog.objects.create(
+        organization=second_organization,
+        task=second_task,
+        actor=user,
+        action='SECOND_ORG_ACTION',
+    )
+    api_client.force_authenticate(user=user)
+    api_client.credentials(
+        HTTP_X_ORG_ID=str(second_organization.id)
+    )
+    response=api_client.get('/api/v1/tasks/activity/')
+    assert response.status_code==200
+    actions=[log['action'] for log in response.data['results']]
+    assert 'SECOND_ORG_ACTION' in actions
+    assert 'FIRST_ORG_ACTION' not in actions
+
+
+@pytest.mark.django_db
+def test_cross_organization_notification_not_visible(
+    api_client,
+    user,
+    organization,
+    membership,
+):
+    second_organization=Organization.objects.create(
+        name='Second Organization',
+        slug='second-organization',
+    )
+    Membership.objects.create(
+        user=user,
+        organization=second_organization,
+        role=Membership.RoleChoices.MEMBER,
+    )
+    first_project=Project.objects.create(
+        organization=organization,
+        name='First Project',
+    )
+    second_project=Project.objects.create(
+        organization=second_organization,
+        name='Second Project',
+    )
+    first_task=Task.objects.create(
+        project=first_project,
+        created_by=user,
+        title='First Task',
+        position=0,
+    )
+    second_task=Task.objects.create(
+        project=second_project,
+        created_by=user,
+        title='Second Task',
+        position=0,
+    )
+    Notification.objects.create(
+        user=user,
+        task=first_task,
+        type='TEST',
+        title='First Org Notification',
+        body='First',
+    )
+    Notification.objects.create(
+        user=user,
+        task=second_task,
+        type='TEST',
+        title='Second Org Notification',
+        body='Second',
+    )
+    api_client.force_authenticate(user=user)
+    api_client.credentials(
+        HTTP_X_ORG_ID=str(second_organization.id)
+    )
+    response=api_client.get('/api/v1/tasks/notifications/')
+    assert response.status_code==200
+    titles=[item['title'] for item in response.data['results']]
+    assert 'Second Org Notification' in titles
+    assert 'First Org Notification' not in titles
+
+
+@pytest.mark.django_db
+def test_task_label_rejects_cross_organization_assignment(
+    user,
+    organization,
+    membership,
+):
+    second_organization=Organization.objects.create(
+        name='Second Organization',
+        slug='second-organization',
+    )
+    Membership.objects.create(
+        user=user,
+        organization=second_organization,
+        role=Membership.RoleChoices.MEMBER,
+    )
+    project=Project.objects.create(
+        organization=organization,
+        name='First Project',
+    )
+    task=Task.objects.create(
+        project=project,
+        created_by=user,
+        title='First Org Task',
+        position=0,
+    )
+    foreign_label=Label.objects.create(
+        organization=second_organization,
+        name='Foreign Label',
+    )
+
+    assert task.project.organization!=foreign_label.organization

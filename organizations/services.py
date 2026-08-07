@@ -3,6 +3,7 @@ import secrets
 from datetime import timedelta
 
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -35,65 +36,56 @@ def create_organization(user,validated_data):
         logger.error(f'Organization creation failed:{str(e)}')
         raise
 
-def list_organizations():
+def list_organizations(user):
     """
-    Retrieve all organizations.
-    """
-
-    logger.info('Retrieving all organizations')
-    try:
-        organizations=Organization.objects.all()
-        logger.info('Organizations retrieved successfully.')
-        return organizations
-    except Exception as e:
-        logger.error(f'Failed to retrieve organizations: {str(e)}')
-        raise
-
-def get_organization(slug):
-    """
-    Retrieve an organization using its slug.
+    Retrieve organizations the user belongs to
     """
 
-    logger.info(f'Retrieving organization with slug: {slug}')
-    try:
-        organization=Organization.objects.get(slug=slug)
-        logger.info(f'Organization retrieved successfully: {slug}')
-        return organization
-    except Exception as e:
-        logger.error(f'Failed to retrieve organization: {slug}: {str(e)}')
-        raise
+    logger.info(f'Retrieving organizations for user: {user.email}')
+    return Organization.objects.filter(
+        membership__user=user,
+        is_active=True,
+    ).distinct()
 
-def update_organization(slug,validated_data):
+def get_organization(slug,user):
+    """
+    Retrieve organization the user belongs to
+    """
+
+    return get_object_or_404(
+        Organization,
+        slug=slug,
+        membership__user=user,
+        is_active=True,
+    )
+
+def update_organization(organization,validated_data):
     """
     Update organization
     """
 
-    logger.info(f'Updating organization: {slug}')
+    logger.info(f'Updating organization: {organization.slug}')
     try:
-        organization=Organization.objects.get(slug=slug)
-        logger.info(f'Successfully retrieved organization: {slug}')
         organization.name=validated_data['name']
         organization.slug=slugify(validated_data['name'])
         organization.save()
-        logger.info(f'Successfully updated organization {slug}')
+        logger.info(f'Successfully updated organization: {organization.slug}')
         return organization
     except Exception as e:
-        logger.error(f'Failed to update organization: {slug}: {str(e)}')
+        logger.error(f'Failed to update organization: {organization.slug}: {str(e)}')
         raise
 
-def delete_organization(slug):
+def delete_organization(organization):
     """
     Delete organization
     """
 
-    logger.info(f'Deleting organization: {slug}')
+    logger.info(f'Deleting organization: {organization.slug}')
     try:
-        organization=Organization.objects.get(slug=slug)
-        logger.info(f'Retrieved organization: {slug}')
         organization.delete()
-        logger.info(f'Deleted organization: {slug}')
+        logger.info(f'Successfully deleted organization: {organization.slug}')
     except Exception as e:
-        logger.error(f'Failed to delete organization: {slug}: {str(e)}')
+        logger.error(f'Failed to delete organization: {organization.slug}: {str(e)}')
         raise
 
 
@@ -151,3 +143,13 @@ def accept_invitation(user,validated_data):
     invitation.save(update_fields=['status'])
     return membership
 
+
+def user_can_manage_organization(user,organization):
+    return Membership.objects.filter(
+        user=user,
+        organization=organization,
+        role__in=[
+            Membership.RoleChoices.OWNER,
+            Membership.RoleChoices.ADMIN,
+        ],
+    ).exists()

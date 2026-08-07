@@ -8,17 +8,6 @@ from .tasks import generate_export
 
 class ProjectService:
     @staticmethod
-    def get_user_organization(user):
-        membership=Membership.objects.select_related(
-            'organization'
-        ).filter(
-            user=user
-        ).first()
-        if membership is None:
-            raise ValueError('User is not part of any organization.')
-        return membership.organization
-
-    @staticmethod
     def get_projects(organization):
         return Project.objects.for_organization(
             organization

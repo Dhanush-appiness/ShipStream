@@ -120,13 +120,14 @@ class CommentListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return CommentService.get_comments(
             self.kwargs['task_id'],
-            self.request.user,
+            self.request.organization,
         )
 
     def perform_create(self,serializer):
         CommentService.create_comment(
             serializer,
             self.request.user,
+            self.request.organization,
         )
 
 
@@ -139,7 +140,7 @@ class CommentRetrieveUpdateDestroyView(
     def get_object(self):
         return CommentService.get_comment(
             self.kwargs['pk'],
-            self.request.user,
+            self.request.organization,
         )
 
     def perform_update(self,serializer):
@@ -159,13 +160,13 @@ class LabelListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return LabelService.get_labels(
-            self.request.user
+            self.request.organization
         )
 
     def perform_create(self, serializer):
         LabelService.create_label(
             serializer,
-            self.request.user,
+            self.request.organization,
         )
 
 
@@ -178,7 +179,7 @@ class LabelRetrieveUpdateDestroyView(
     def get_object(self):
         return LabelService.get_label(
             self.kwargs['pk'],
-            self.request.user,
+            self.request.organization,
         )
 
     def perform_update(self,serializer):
@@ -199,13 +200,13 @@ class TaskLabelListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         return TaskLabelService.get_task_labels(
-            self.request.user
+            self.request.organization
         )
 
     def perform_create(self,serializer):
         TaskLabelService.create_task_label(
             serializer,
-            self.request.user,
+            self.request.organization,
         )
 
 
@@ -218,7 +219,7 @@ class TaskLabelRetrieveUpdateDestroyView(
     def get_object(self):
         return TaskLabelService.get_task_label(
             self.kwargs['pk'],
-            self.request.user,
+            self.request.organization,
         )
 
     def perform_update(self,serializer):
@@ -239,7 +240,7 @@ class ActivityLogListView(generics.ListAPIView):
 
     def get_queryset(self):
         return ActivityLogService.get_logs(
-            self.request.user
+            self.request.organization
         )
 
 
@@ -250,7 +251,7 @@ class ActivityLogDetailView(generics.RetrieveAPIView):
     def get_object(self):
         return ActivityLogService.get_log(
             self.kwargs['pk'],
-            self.request.user,
+            self.request.organization,
         )
 
 
@@ -260,7 +261,8 @@ class NotificationListView(generics.ListAPIView):
 
     def get_queryset(self):
         return NotificationService.get_notifications(
-            self.request.user
+            self.request.user,
+            self.request.organization,
         )
 
 class NotificationRetrieveView(generics.RetrieveAPIView):
@@ -271,6 +273,7 @@ class NotificationRetrieveView(generics.RetrieveAPIView):
         return NotificationService.get_notification(
             self.kwargs['pk'],
             self.request.user,
+            self.request.organization,
         )
 
 
@@ -282,6 +285,7 @@ class NotificationReadView(generics.UpdateAPIView):
         return NotificationService.get_notification(
             self.kwargs['pk'],
             self.request.user,
+            self.request.organization,
         )
 
     def update(self, request, *args, **kwargs):

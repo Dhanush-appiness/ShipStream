@@ -31,12 +31,6 @@ class TaskService:
             },
         )
 
-    @staticmethod
-    def get_user_organization(user):
-        membership=Membership.objects.filter(user=user).select_related('organization').first()
-        if not membership:
-            raise ValueError('User does not belong to any organization.')
-        return membership.organization
 
     @staticmethod
     def get_tasks(organization):
@@ -241,8 +235,7 @@ class TaskService:
 class CommentService:
 
     @staticmethod
-    def get_comments(task_id, user):
-        organization=TaskService.get_user_organization(user)
+    def get_comments(task_id,organization):
         return Comment.objects.filter(
             task__id=task_id,
             task__project__organization=organization,
@@ -256,9 +249,8 @@ class CommentService:
         )
 
     @staticmethod
-    def create_comment(serializer,user):
+    def create_comment(serializer,user,organization):
         task=serializer.validated_data['task']
-        organization=TaskService.get_user_organization(user)
 
         if task.project.organization!=organization:
             raise ValueError(
@@ -302,8 +294,7 @@ class CommentService:
             )
 
     @staticmethod
-    def get_comment(comment_id,user):
-        organization=TaskService.get_user_organization(user)
+    def get_comment(comment_id,organization):
         return get_object_or_404(
             Comment,
             id=comment_id,
@@ -325,22 +316,19 @@ class CommentService:
 class LabelService:
 
     @staticmethod
-    def get_labels(user):
-        organization=TaskService.get_user_organization(user)
+    def get_labels(organization):
         return Label.objects.filter(
             organization=organization
         )
 
     @staticmethod
-    def create_label(serializer,user):
-        organization=TaskService.get_user_organization(user)
+    def create_label(serializer,organization):
         serializer.save(
             organization=organization
         )
 
     @staticmethod
-    def get_label(label_id,user):
-        organization=TaskService.get_user_organization(user)
+    def get_label(label_id,organization):
         return get_object_or_404(
             Label,
             id=label_id,
@@ -362,8 +350,7 @@ class LabelService:
 class TaskLabelService:
 
     @staticmethod
-    def get_task_labels(user):
-        organization=TaskService.get_user_organization(user)
+    def get_task_labels(organization):
 
         return TaskLabel.objects.filter(
             task__project__organization=organization
@@ -373,8 +360,7 @@ class TaskLabelService:
         )
 
     @staticmethod
-    def create_task_label(serializer, user):
-        organization=TaskService.get_user_organization(user)
+    def create_task_label(serializer,organization):
         task=serializer.validated_data['task']
         label=serializer.validated_data['label']
         if task.project.organization!=organization:
@@ -385,8 +371,7 @@ class TaskLabelService:
         serializer.save()
 
     @staticmethod
-    def get_task_label(pk,user):
-        organization=TaskService.get_user_organization(user)
+    def get_task_label(pk,organization):
         return get_object_or_404(
             TaskLabel,
             id=pk,
@@ -426,8 +411,7 @@ class ActivityLogService:
         )
 
     @staticmethod
-    def get_logs(user):
-        organization=TaskService.get_user_organization(user)
+    def get_logs(organization):
         return ActivityLog.objects.filter(
             organization=organization
         ).select_related(
@@ -436,8 +420,7 @@ class ActivityLogService:
         )
 
     @staticmethod
-    def get_log(pk,user):
-        organization=TaskService.get_user_organization(user)
+    def get_log(pk,organization):
         return get_object_or_404(
             ActivityLog,
             id=pk,
@@ -464,19 +447,21 @@ class NotificationService:
         )
 
     @staticmethod
-    def get_notifications(user):
+    def get_notifications(user,organization):
         return Notification.objects.filter(
-            user=user
+            user=user,
+            task__project__organization=organization,
         ).select_related(
             'task'
         )
 
     @staticmethod
-    def get_notification(pk, user):
+    def get_notification(pk,user,organization):
         return get_object_or_404(
             Notification,
             id=pk,
             user=user,
+            task__project__organization=organization,
         )
 
     @staticmethod

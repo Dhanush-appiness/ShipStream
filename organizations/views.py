@@ -1,6 +1,7 @@
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -25,6 +26,7 @@ from .services import (
     get_organization,
     list_organizations,
     update_organization,
+    user_can_manage_organization,
 )
 
 
@@ -71,7 +73,7 @@ class OrganizationView(GenericAPIView):
         Retrieve all organizations.
         """
 
-        queryset=list_organizations()
+        queryset=list_organizations(request.user)
         queryset=self.filter_queryset(queryset)
         page=self.paginate_queryset(queryset)
         if page is not None:
@@ -92,7 +94,7 @@ class OrganizationDetailView(APIView):
         Retrieve a single organization by slug.
         """
 
-        organization=get_organization(slug)
+        organization=get_organization(slug,request.user)
         serializer=OrganizationSerializer(organization)
         return Response(serializer.data)
 
@@ -100,11 +102,14 @@ class OrganizationDetailView(APIView):
         """
         Update the organization
         """
-        organization=get_organization(slug)
+
+        organization=get_organization(slug,request.user)
+        if not user_can_manage_organization(request.user,organization):
+            raise PermissionDenied('Only organization owners and admins can update this organization')
         serializer=OrganizationSerializer(organization,data=request.data)
         if serializer.is_valid():
             updated_organization=update_organization(
-                slug,
+                organization,
                 serializer.validated_data
             )
             return Response(
@@ -114,7 +119,6 @@ class OrganizationDetailView(APIView):
                     'slug':updated_organization.slug,
                 },
                 status=status.HTTP_200_OK
-
             )
         return Response(
             serializer.errors,
@@ -125,7 +129,11 @@ class OrganizationDetailView(APIView):
         """
         Delete the organization
         """
-        delete_organization(slug)
+
+        organization=get_organization(slug,request.user)
+        if not user_can_manage_organization(request.user,organization):
+            raise PermissionDenied('Only organization owners and admins can delete this organization')
+        delete_organization(organization)
         return Response(
             {
                 'message':'Organization deleted successfully'
