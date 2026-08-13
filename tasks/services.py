@@ -510,8 +510,8 @@ class LabelService:
     def get_labels(organization):
         """Return every label belonging to the organization."""
         return Label.objects.filter(
-            organization=organization
-        )
+        organization=organization
+        ).order_by('created_at', 'id')
 
     @staticmethod
     def create_label(serializer,organization):
@@ -671,8 +671,8 @@ class NotificationService:
             user=user,
             task__project__organization=organization,
         ).select_related(
-            'task'
-        )
+        'task'
+        ).order_by('created_at', 'id')
 
     @staticmethod
     def get_notification(pk,user,organization):

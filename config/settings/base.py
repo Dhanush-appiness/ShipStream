@@ -29,7 +29,6 @@ INSTALLED_APPS=[
 
     #local apps
     'accounts',
-    'notifications',
     'organizations',
     'projects',
     'tasks',

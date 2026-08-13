@@ -13,11 +13,7 @@ from .tasks import generate_export
 
 logger = logging.getLogger(__name__)
 
-# Project.status values. Mirrors the choices on the Project model, kept as
-# named constants so service-layer code never compares against a bare string.
-PROJECT_STATUS_ACTIVE = 'ACTIVE'
-PROJECT_STATUS_ARCHIVED = 'ARCHIVED'
-
+# Project status values are defined on the Project model.
 
 class ProjectService:
     """Business logic for creating, mutating, and querying projects."""
@@ -73,7 +69,7 @@ class ProjectService:
         """Mark a project ARCHIVED without soft-deleting it."""
         try:
             project = ProjectService.get_project(organization, project_id)
-            project.status = PROJECT_STATUS_ARCHIVED
+            project.status=Project.StatusChoices.ARCHIVED
             project.save(update_fields=['status'])
             return project
         except Exception as exc:
@@ -109,7 +105,7 @@ class ProjectMemberService:
     def get_members(organization, project_id):
         """Return every member assigned to a project, with user/project pre-fetched."""
         project = ProjectService.get_project(organization, project_id)
-        return ProjectMember.objects.filter(project=project).select_related('user', 'project')
+        return ProjectMember.objects.filter(project=project).select_related('user','project').order_by('joined_at','id')
 
     @staticmethod
     def add_member(organization, project_id, user):

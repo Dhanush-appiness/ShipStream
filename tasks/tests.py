@@ -853,7 +853,10 @@ async def test_task_websocket_rejects_cross_organization_user(project,guest):
 
     connected,_=await communicator.connect()
 
-    assert connected is False
+    try:
+        assert connected is False
+    finally:
+        await communicator.disconnect()
 
 @pytest.mark.django_db
 def test_task_queryset_avoids_n_plus_one(

@@ -12,6 +12,7 @@ from .tasks import send_invitation_email
 
 logger=logging.getLogger(__name__)
 
+@transaction.atomic
 def create_organization(user,validated_data):
     """
     Create a new organization with a generated slug
@@ -42,9 +43,9 @@ def list_organizations(user):
 
     logger.info(f'Retrieving organizations for user: {user.email}')
     return Organization.objects.filter(
-        membership__user=user,
-        is_active=True,
-    ).distinct()
+    membership__user=user,
+    is_active=True,
+    ).distinct().order_by('created_at','id')
 
 def get_organization(slug,user):
     """

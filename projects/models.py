@@ -6,15 +6,24 @@ from organizations.models import Organization
 
 
 class Project(models.Model):
+    class StatusChoices(models.TextChoices):
+        ACTIVE='ACTIVE','Active'
+        ARCHIVED='ARCHIVED','Archived'
+
     objects=ProjectManager()
     all_objects=AllObjectsManager()
+
     organization=models.ForeignKey(
         Organization,
         on_delete=models.CASCADE
     )
     name=models.CharField(max_length=255)
     description=models.TextField(blank=True)
-    status=models.CharField(max_length=20, default='ACTIVE')
+    status=models.CharField(
+        max_length=20,
+        choices=StatusChoices.choices,
+        default=StatusChoices.ACTIVE,
+    )
     is_deleted=models.BooleanField(default=False)
     created_at=models.DateTimeField(auto_now_add=True)
     updated_at=models.DateTimeField(auto_now=True)
@@ -63,8 +72,6 @@ class ProjectMember(models.Model):
 class ExportJob(models.Model):
     class ExportType(models.TextChoices):
         CSV='CSV','CSV'
-        XML='XML','XML'
-        PDF='PDF','PDF'
     class StatusChoices(models.TextChoices):
         Pending='PENDING','Pending'
         Processing='PROCESSING','Processing'
@@ -80,7 +87,7 @@ class ExportJob(models.Model):
         on_delete=models.CASCADE,
         related_name='export_jobs'
     )
-    type=models.CharField(max_length=20,choices=ExportType.choices,null=True,blank=True)
+    type=models.CharField(max_length=20,choices=ExportType.choices,default=ExportType.CSV,)
     status=models.CharField(max_length=20,choices=StatusChoices.choices,default=StatusChoices.Pending)
     file_path=models.CharField(max_length=500,null=True,blank=True)
     file_url=models.URLField(null=True,blank=True)
