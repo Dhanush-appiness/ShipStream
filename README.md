@@ -99,7 +99,6 @@ doesn't require Redis to be running.
 | `organizations` | `Organization` (tenant), `Membership` (role-scoped org membership), `Invitation`, the `X-Org-ID` tenant middleware |
 | `projects` | `Project`, `ProjectMember`, CSV `ExportJob` + async generation |
 | `tasks` | `Task`, `Comment`, `Label`, `ActivityLog`, `Notification`, task filtering/search/dashboard, the project-scoped WebSocket consumer |
-| `notifications` | placeholder app — the actual `Notification` model lives in `tasks` since notifications are task-scoped; kept as a separate Django app per the original scaffolding |
 | `common` | cross-cutting infrastructure: tenant-aware querysets/managers (`managers.py`), permission classes (`permissions.py`), the custom exception handler, JWT WebSocket auth middleware (`ws_auth.py`), the `seed_demo_data` management command |
 | `config` | settings (split into `base` / `dev` / `prod` / `test`), URL routing, Celery app + beat schedule, ASGI/Channels routing |
 
@@ -254,7 +253,6 @@ accounts/        custom User model, JWT auth, password reset
 organizations/    Organization, Membership, Invitation, tenant middleware
 projects/        Project, ProjectMember, ExportJob + CSV export task
 tasks/           Task, Comment, Label, ActivityLog, Notification, dashboard, WebSocket consumer
-notifications/    placeholder app (Notification model lives in tasks/)
 common/          tenant-aware managers, permissions, exception handler, ws auth, seed command
 config/          settings (base/dev/prod/test), urls, celery app, asgi/routing
 docs/adr/        architecture decision records
@@ -272,11 +270,11 @@ dependencies, lints with `ruff check .`, type-checks with `mypy .`, runs
 migrations, then runs the actual pytest suite with coverage enforcement
 (`pytest --cov=. --cov-fail-under=85`). All three gates — lint, types, and
 coverage — are verified clean/passing locally as of this writing (ruff: 0
-violations; mypy: 0 errors across 83 source files; coverage: 86%, above the
-assignment's 85% target). The workflow previously ran `python manage.py
-test`, which doesn't properly discover this project's pytest-style suite
-(fixtures via `conftest.py`, not `unittest.TestCase` subclasses) — that's
-fixed now.
+violations; the CI workflow runs Ruff, mypy, migrations, and the pytest suite
+with an 85% minimum coverage requirement). The workflow previously ran
+`python manage.py test`, which doesn't properly discover this project's
+pytest-style suite (fixtures via `conftest.py`, not `unittest.TestCase`
+subclasses) — that's fixed now.
 
 ---
 
