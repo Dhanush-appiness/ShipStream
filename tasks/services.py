@@ -1,14 +1,4 @@
-"""
-Service layer for the tasks app.
-
-Business logic for tasks, comments, labels, task-label links, activity logs,
-and notifications lives here rather than in views or serializers. Views call
-into these services and stay thin (see docs/adr/0002-service-layer.md for
-the reasoning). Every write path here that has more than one meaningful
-failure mode is wrapped in try/except so failures are logged with context
-before being re-raised to the caller (the DRF exception handler in
-common/exceptions.py turns them into the API's standard error envelope).
-"""
+"""Service layer for tasks and related operations."""
 
 import logging
 import re
@@ -28,14 +18,10 @@ from .models import ActivityLog, Comment, Label, Notification, Task, TaskLabel
 
 logger=logging.getLogger(__name__)
 
-# How long a cached dashboard aggregation is trusted before falling back to
-# the database, even if no invalidation event fired. This is a safety net,
-# not the primary invalidation mechanism - see TaskService.invalidate_dashboard_cache.
+# Dashboard cache lifetime in seconds.
 DASHBOARD_CACHE_TTL=300
 
-# Task status values. Mirrors Task.STATUS_CHOICES - kept as separate
-# constants here so service-layer code never compares against a bare
-# string literal.
+# Task status values.
 STATUS_TODO='TODO'
 STATUS_IN_PROGRESS='IN_PROGRESS'
 STATUS_DONE='DONE'
@@ -46,16 +32,15 @@ ACTION_TASK_CREATED='TASK_CREATED'
 ACTION_TASK_UPDATED='TASK_UPDATED'
 ACTION_TASK_DELETED='TASK_DELETED'
 ACTION_COMMENT_ADDED='COMMENT_ADDED'
+ACTION_TASK_RESTORED='TASK_RESTORED'
+ACTION_TASK_REORDERED='TASK_REORDERED'
 
 # Notification.type values written by this service layer.
 NOTIFICATION_TASK_ASSIGNED='TASK_ASSIGNED'
 NOTIFICATION_TASK_UPDATED='TASK_UPDATED'
 NOTIFICATION_MENTION='MENTION'
 
-# Matches an @email.address style mention inside comment text, e.g.
-# "@alice@example.com please review". Deliberately requires a full email
-# rather than a bare username, since that's the only unambiguous way to
-# resolve a mention to exactly one Membership without a separate lookup table.
+# Match @email-style mentions.
 MENTION_PATTERN=r'@([\w\.-]+@[\w\.-]+\.\w+)'
 
 
@@ -64,12 +49,8 @@ class TaskService:
 
     @staticmethod
     def broadcast_task_update(task,action):
-        """
-        Push a task change to every WebSocket client connected to this
-        task's project. Sends to the project-scoped Channels group
-        (project_<id>), never a global group - see
-        docs/adr/0003-realtime-architecture.md for why.
-        """
+        """Broadcast a task update to its project WebSocket group."""
+
         logger.info('Broadcasting %s for task %s',action,task.id)
         channel_layer=get_channel_layer()
         async_to_sync(channel_layer.group_send)(
@@ -86,12 +67,8 @@ class TaskService:
 
     @staticmethod
     def get_tasks(organization):
-        """
-        Return every non-deleted task belonging to the given organization,
-        with the FKs the task list/detail serializers need pre-fetched to
-        stay N+1-free, ordered for kanban-column rendering
-        (status, then position within that column).
-        """
+        """Return non-deleted tasks for an organization."""
+
         return Task.objects.for_organization(
             organization
         ).select_related(
@@ -109,22 +86,14 @@ class TaskService:
 
     @staticmethod
     def invalidate_dashboard_cache(organization):
-        """
-        Drop the cached dashboard for this organization. Called from every
-        task mutation (create/update/delete/restore/reorder) so the next
-        read recomputes fresh numbers instead of waiting out the TTL.
-        """
+        """Clear the dashboard cache for an organization."""
+
         cache.delete(TaskService.get_dashboard_cache_key(organization))
 
     @staticmethod
     def get_dashboard(organization):
-        """
-        Return status counts, overdue count, and per-assignee workload for
-        an organization, computed as database aggregations (not in Python).
-        Cached in Redis for DASHBOARD_CACHE_TTL seconds; callers that
-        mutate tasks are responsible for invalidating via
-        invalidate_dashboard_cache so this stays correct between writes.
-        """
+        """Return dashboard statistics for an organization."""
+
         cache_key=TaskService.get_dashboard_cache_key(organization)
         cached=cache.get(cache_key)
         if cached is not None:
@@ -173,15 +142,8 @@ class TaskService:
 
     @staticmethod
     def search_tasks(organization,query):
-        """
-        Free-text search over an organization's tasks. On PostgreSQL this
-        filters and ranks against the persisted search_vector column
-        (kept up to date by Task.save()) so the GIN index on that column
-        actually gets used - see README's "Database Indexing Decisions"
-        section. Falls back to icontains on non-Postgres backends (e.g.
-        SQLite in a local dev shell) since SearchVector/SearchRank are
-        Postgres-only.
-        """
+        """Search tasks within an organization."""
+
         tasks=TaskService.get_tasks(organization)
 
         if not query:
@@ -217,13 +179,8 @@ class TaskService:
 
     @staticmethod
     def create_task(serializer,user,organization):
-        """
-        Create a task from a validated serializer, then perform every side
-        effect a new task requires: activity log entry, an assignment
-        notification if it was created with an assignee, a WebSocket
-        broadcast to the project's connected clients, and dashboard cache
-        invalidation.
-        """
+        """Create a task and handle its side effects."""
+
         try:
             project=serializer.validated_data['project']
             if project.organization!=organization:
@@ -251,12 +208,9 @@ class TaskService:
             raise
 
     @staticmethod
-    def update_task(task,validated_data):
-        """
-        Apply field changes to an existing task and perform the same side
-        effects as create_task: notify the assignee, log the activity,
-        broadcast the change, invalidate the dashboard cache.
-        """
+    def update_task(task,user,validated_data):
+        """Update a task and handle its side effects."""
+
         try:
             for key, value in validated_data.items():
                 setattr(task, key,value)
@@ -272,7 +226,7 @@ class TaskService:
             ActivityLogService.log(
                 task.project.organization,
                 task,
-                task.created_by,
+                user,
                 ACTION_TASK_UPDATED,
             )
             TaskService.broadcast_task_update(task,'updated')
@@ -283,18 +237,15 @@ class TaskService:
             raise
 
     @staticmethod
-    def delete_task(task):
-        """
-        Soft-delete a task (see Task.delete()), log the deletion, broadcast
-        it, and invalidate the dashboard cache so deleted tasks stop being
-        counted immediately rather than after the cache TTL expires.
-        """
+    def delete_task(task,user):
+        """Soft-delete a task and handle its side effects."""
+
         try:
             task.delete()
             ActivityLogService.log(
                 task.project.organization,
                 task,
-                task.created_by,
+                user,
                 ACTION_TASK_DELETED,
             )
             TaskService.broadcast_task_update(task,'deleted')
@@ -304,18 +255,20 @@ class TaskService:
             raise
 
     @staticmethod
-    def restore_task(organization,task_id):
-        """
-        Bring a soft-deleted task back (admin-only at the view layer - see
-        TaskRestoreView). 404s if no matching soft-deleted task exists for
-        this organization, which also prevents restoring a task that was
-        never deleted in the first place.
-        """
+    def restore_task(organization,task_id,user):
+        """Restore a soft-deleted task."""
+
         try:
             task=get_object_or_404(
                 Task.all_objects.filter(project__organization=organization),
                 id=task_id,
                 is_deleted=True,
+            )
+            ActivityLogService.log(
+                organization,
+                task,
+                user,
+                ACTION_TASK_RESTORED,
             )
             task.is_deleted=False
             task.save(update_fields=['is_deleted'])
@@ -327,23 +280,9 @@ class TaskService:
 
     @staticmethod
     @transaction.atomic
-    def reorder_task(organization,task_id,status,position):
-        """
-        Move a task to a new status column and/or position within it,
-        shifting every other task in the affected column(s) to keep
-        `position` values contiguous. Wrapped in a single DB transaction
-        so a failure partway through can't leave positions inconsistent.
+    def reorder_task(organization,task_id,status,position,user):
+        """Move a task to a different position or status."""
 
-        Three cases, handled separately:
-        1. Same column, moving down (higher position): tasks strictly
-           between the old and new position shift up by one to close the gap.
-        2. Same column, moving up (lower position): tasks between the new
-           and old position shift down by one to make room.
-        3. Different column: the old column's tasks after the old position
-           shift up by one (closing the gap left behind), and the new
-           column's tasks at/after the new position shift down by one
-           (making room for the incoming task).
-        """
         try:
             task=get_object_or_404(
                 Task.objects.for_organization(organization),
@@ -394,6 +333,18 @@ class TaskService:
             task.status=status
             task.position=position
             task.save(update_fields=['status','position'])
+            ActivityLogService.log(
+                organization,
+                task,
+                user,
+                ACTION_TASK_REORDERED,
+                {
+                    'old_status':old_status,
+                    'new_status':status,
+                    'old_position':old_position,
+                    'new_position':position,
+                },
+            )
             TaskService.invalidate_dashboard_cache(organization)
             return task
         except Exception as exc:
@@ -426,13 +377,8 @@ class CommentService:
 
     @staticmethod
     def create_comment(serializer,user,organization):
-        """
-        Save a comment, log the activity, then resolve any @mentions in its
-        content to organization members and notify each one (except the
-        comment's own author, who doesn't need to be told they mentioned
-        themselves). Notification emails are dispatched to Celery, not sent
-        inline, so comment creation isn't blocked on outbound mail.
-        """
+        """Create a comment and notify mentioned users."""
+
         try:
             task=serializer.validated_data['task']
 
@@ -558,12 +504,8 @@ class TaskLabelService:
 
     @staticmethod
     def create_task_label(serializer,organization):
-        """
-        Attach a label to a task, after confirming both the task and the
-        label actually belong to the active organization - guards against
-        a client passing a valid-looking task/label id that belongs to a
-        different tenant entirely.
-        """
+        """Attach a label to a task after validating organization ownership."""
+
         task=serializer.validated_data['task']
         label=serializer.validated_data['label']
         if task.project.organization!=organization:
@@ -607,13 +549,8 @@ class ActivityLogService:
         action,
         payload=None,
     ):
-        """
-        Record one activity log entry. This is the single place every
-        significant task mutation (create/update/delete/comment) writes
-        through, per the "immutable activity record" requirement - see
-        docs/adr/0002-service-layer.md for why this is a plain function
-        call from each mutating service method rather than a signal.
-        """
+        """Create an activity log entry."""
+
         if payload is None:
             payload={}
         ActivityLog.objects.create(

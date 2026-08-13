@@ -25,16 +25,6 @@ class User(AbstractUser):
     is_verified=models.BooleanField(default=False,db_index=True)
     USERNAME_FIELD="email"
     REQUIRED_FIELDS=[]
-    ROLE_CHOICES=[
-        ("ADMIN","Admin"),
-        ("MANAGER","Manager"),
-        ("MEMBER","Member"),
-    ]
-    role=models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES,
-        default="MEMBER",
-    )
     objects=UserManager()
 
 class PasswordReset(models.Model):

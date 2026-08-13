@@ -2,8 +2,6 @@ import os
 from typing import cast
 
 from django.http import FileResponse
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -22,7 +20,6 @@ from .serializers import ExportJobSerializer, ProjectMemberSerializer, ProjectSe
 from .services import ExportJobService, ProjectMemberService, ProjectService
 
 
-@method_decorator(cache_page(60), name='dispatch')
 class ProjectListCreateView(generics.ListCreateAPIView):
     serializer_class=ProjectSerializer
     permission_classes=[IsAuthenticated,HasOrganizationAccess,IsOrganizationMemberOrReadOnly,]

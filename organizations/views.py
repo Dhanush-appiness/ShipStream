@@ -26,6 +26,7 @@ from .services import (
     get_organization,
     list_organizations,
     update_organization,
+    user_can_delete_organization,
     user_can_manage_organization,
 )
 
@@ -133,8 +134,8 @@ class OrganizationDetailView(APIView):
         """
 
         organization=get_organization(slug,request.user)
-        if not user_can_manage_organization(request.user,organization):
-            raise PermissionDenied('Only organization owners and admins can delete this organization')
+        if not user_can_delete_organization(request.user,organization):
+            raise PermissionDenied('Only organization owners can delete this organization')
         delete_organization(organization)
         return Response(
             {

@@ -48,6 +48,7 @@ def test_reorder_task_down_same_status(
         task_b.id,
         'TODO',
         3,
+        owner,
     )
 
     task_a.refresh_from_db()
@@ -101,6 +102,7 @@ def test_reorder_task_up_same_status(
         task_d.id,
         'TODO',
         1,
+        owner,
     )
 
     task_a.refresh_from_db()
@@ -160,6 +162,7 @@ def test_reorder_task_between_statuses(
         task_b.id,
         'IN_PROGRESS',
         1,
+        owner,
     )
 
     task_a.refresh_from_db()
@@ -677,7 +680,7 @@ def test_task_dashboard_cache_invalidates_on_status_change(
     assert dashboard_before['status_counts']['TODO']==1
     assert dashboard_before['status_counts']['DONE']==0
 
-    TaskService.update_task(task,{'status':'DONE'})
+    TaskService.update_task(task,owner,{'status':'DONE'})
 
     dashboard_after=TaskService.get_dashboard(organization)
     assert dashboard_after['status_counts']['TODO']==0
@@ -1288,7 +1291,7 @@ def test_update_task_logs_and_reraises_on_failure(
         side_effect=RuntimeError('boom'),
     ):
         with pytest.raises(RuntimeError,match='boom'):
-            TaskService.update_task(task,{'title':'New Title'})
+            TaskService.update_task(task,user,{'title':'New Title'})
 
 
 @pytest.mark.django_db

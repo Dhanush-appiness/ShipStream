@@ -16,7 +16,7 @@ logger=logging.getLogger(__name__)
 def create_organization(user,validated_data):
     """
     Create a new organization with a generated slug
-    and make the creator its ADMIN.
+    and make the creator its OWNER.
     """
 
     name=validated_data["name"]
@@ -28,7 +28,7 @@ def create_organization(user,validated_data):
         Membership.objects.create(
             user=user,
             organization=organization,
-            role=Membership.RoleChoices.ADMIN,
+            role=Membership.RoleChoices.OWNER,
         )
         logger.info(f'Organization created successfully:{name}')
         return organization
@@ -89,12 +89,9 @@ def delete_organization(organization):
 
 def create_invitation(user,organization,validated_data):
     """
-    Create a pending invitation for an email to join the organization, then
-    schedule the invitation email on Celery once the enclosing transaction
-    commits (so we never email someone about a row that got rolled back).
-    Rejects the email if it already belongs to a member, or already has a
-    pending invitation, to avoid duplicate invites.
+    Create an invitation and send the email through Celery.
     """
+
     logger.info(
         f'Creating invitation for {validated_data["email"]} to organization: {organization.slug}'
     )
@@ -132,11 +129,9 @@ def create_invitation(user,organization,validated_data):
 @transaction.atomic
 def accept_invitation(user,validated_data):
     """
-    Accept a pending invitation by token, creating (or reusing) the
-    corresponding Membership. Rejects tokens that are unknown, already
-    used, expired (marking the invitation EXPIRED as a side effect), or
-    addressed to a different email than the accepting user's.
+    Accept an invitation and create the user's membership.
     """
+
     try:
         token=validated_data['token']
         invitation=Invitation.objects.filter(
@@ -177,4 +172,12 @@ def user_can_manage_organization(user,organization):
             Membership.RoleChoices.OWNER,
             Membership.RoleChoices.ADMIN,
         ],
+    ).exists()
+
+def user_can_delete_organization(user, organization):
+    """Return True only if the user is the OWNER of the organization."""
+    return Membership.objects.filter(
+        user=user,
+        organization=organization,
+        role=Membership.RoleChoices.OWNER,
     ).exists()

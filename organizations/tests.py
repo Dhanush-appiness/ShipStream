@@ -238,6 +238,38 @@ def test_owner_can_create_invitation(
         organization=organization,
     ).exists()
 
+@pytest.mark.django_db
+def test_admin_can_create_invitation(
+    api_client,
+    owner,
+    organization,
+):
+    from organizations.models import Membership
+
+    admin = User.objects.create_user(
+        email='admin@example.com',
+        password='testpass123',
+    )
+    Membership.objects.create(
+        user=admin,
+        organization=organization,
+        role=Membership.RoleChoices.ADMIN,
+    )
+
+    api_client.force_authenticate(user=admin)
+    api_client.credentials(HTTP_X_ORG_ID=str(organization.id))
+
+    response = api_client.post(
+        reverse('create-invitation', kwargs={'version': 'v1'}),
+        {
+            'email': 'admin-invite@example.com',
+            'role': Invitation.RoleChoices.MEMBER,
+        },
+        format='json',
+    )
+
+    assert response.status_code == 201
+
 
 @pytest.mark.django_db
 def test_guest_cannot_create_invitation(
@@ -343,7 +375,7 @@ def test_create_organization_endpoint(api_client,user):
     assert Membership.objects.filter(
         user=user,
         organization__slug='brand-new-org',
-        role='ADMIN',
+        role=Membership.RoleChoices.OWNER,
     ).exists()
 
 
@@ -420,6 +452,37 @@ def test_owner_can_update_organization(api_client,owner,organization,owner_membe
     organization.refresh_from_db()
     assert organization.name=='Renamed Org'
 
+@pytest.mark.django_db
+def test_admin_can_update_organization(
+    api_client,
+    organization,
+):
+    admin = User.objects.create_user(
+        email='admin@example.com',
+        password='testpass123',
+    )
+    Membership.objects.create(
+        user=admin,
+        organization=organization,
+        role=Membership.RoleChoices.ADMIN,
+    )
+
+    api_client.force_authenticate(user=admin)
+
+    response = api_client.put(
+        reverse(
+            'retrieve-organization',
+            kwargs={'version': 'v1', 'slug': organization.slug},
+        ),
+        {'name': 'Admin Renamed Org'},
+        format='json',
+    )
+
+    assert response.status_code == 200
+
+    organization.refresh_from_db()
+    assert organization.name == 'Admin Renamed Org'
+
 
 @pytest.mark.django_db
 def test_member_cannot_update_organization(api_client,user,organization,membership):
@@ -443,6 +506,33 @@ def test_owner_can_delete_organization(api_client,owner,organization,owner_membe
     )
 
     assert response.status_code==200
+
+@pytest.mark.django_db
+def test_admin_cannot_delete_organization(
+    api_client,
+    organization,
+):
+    admin = User.objects.create_user(
+        email='admin@example.com',
+        password='testpass123',
+    )
+    Membership.objects.create(
+        user=admin,
+        organization=organization,
+        role=Membership.RoleChoices.ADMIN,
+    )
+
+    api_client.force_authenticate(user=admin)
+
+    response = api_client.delete(
+        reverse(
+            'retrieve-organization',
+            kwargs={'version': 'v1', 'slug': organization.slug},
+        ),
+    )
+
+    assert response.status_code == 403
+    assert Organization.objects.filter(id=organization.id).exists()
 
 
 @pytest.mark.django_db

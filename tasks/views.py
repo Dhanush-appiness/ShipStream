@@ -77,11 +77,12 @@ class TaskRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         task=self.get_object()
         TaskService.update_task(
             task,
+            self.request.user,
             serializer.validated_data,
         )
 
     def perform_destroy(self,instance):
-        TaskService.delete_task(instance)
+        TaskService.delete_task(instance,self.request.user,)
 
 
 class TaskReorderView(APIView):
@@ -96,6 +97,7 @@ class TaskReorderView(APIView):
             pk,
             serializer.validated_data['status'],
             serializer.validated_data['position'],
+            request.user,
         )
 
         return Response(
@@ -111,6 +113,7 @@ class TaskRestoreView(APIView):
         task=TaskService.restore_task(
             cast(OrganizationRequest,request).organization,
             pk,
+            request.user,
         )
 
         return Response(
